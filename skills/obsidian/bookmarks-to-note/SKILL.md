@@ -36,7 +36,7 @@ description: "Convert a Chrome bookmark folder into an Obsidian markdown note. U
 python3 scripts/chrome_bookmarks_to_note.py "<收藏夹目录>" "<输出目录>"
 ```
 
-## 快捷方式（推荐）
+## 本地方便包装脚本
 
 ```bash
 bash scripts/to_stock_inbox.sh "<收藏夹目录>" [输出相对路径]
@@ -57,7 +57,7 @@ bash scripts/to_stock_inbox.sh "Bookmarks Bar/AI Tools" "research/bookmarks"
 
 说明：
 
-- 输出基准库目录：`$OBSIDIAN_VAULT`，未设置时默认 `~/Documents/Obsidian Vault`
+- 输出基准库目录：优先使用 `$OBSIDIAN_VAULT`，否则 wrapper 使用本地默认 vault 路径
 - 自动把 `category` 设为输出目录名（可用 `--category` 覆盖）
 - 未显式传入时，wrapper 默认注入 `--group-mode hybrid --learn-rules`
 - 默认会在执行前弹出预览并要求确认（`[1] Yes [2] No`）
@@ -68,7 +68,7 @@ bash scripts/to_stock_inbox.sh "Bookmarks Bar/AI Tools" "research/bookmarks"
 ```bash
 python3 scripts/chrome_bookmarks_to_note.py \
   "Bookmarks Bar/AI Tools" \
-  "/Users/liyang/Documents/Obsidian Vault/research/bookmarks"
+  "/path/to/output-dir"
 ```
 
 可选参数：

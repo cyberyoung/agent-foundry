@@ -1,5 +1,5 @@
 ---
-name: pdf-to-obsidian
+name: ob-pdf-to-obsidian
 description: "Convert PDF files into Obsidian-compatible Markdown notes with image extraction, table conversion, formatting preservation, and TOC/frontmatter generation. Use this skill whenever the user wants to import a .pdf into Obsidian as a markdown note."
 ---
 
@@ -40,7 +40,7 @@ Run:
 python3 <skill-path>/scripts/pdf_to_obsidian.py <input.pdf> <output-dir>
 ```
 
-Quick wrapper (recommended, vault-relative output path):
+Local convenience wrapper (vault-relative output path):
 
 ```bash
 bash <skill-path>/scripts/to_vault.sh <input.pdf> [output-rel-path]
@@ -49,7 +49,7 @@ bash <skill-path>/scripts/to_vault.sh <input.pdf> [output-rel-path]
 Examples:
 
 ```bash
-# Interactive output selection (recommended)
+# Interactive output selection
 bash <skill-path>/scripts/to_vault.sh /path/to/report.pdf
 
 # Output to a research note directory
@@ -61,7 +61,7 @@ bash <skill-path>/scripts/to_vault.sh /path/to/report.pdf "research/notes" --ana
 
 Wrapper notes:
 
-- Vault root: `$OBSIDIAN_VAULT`, fallback to `~/Documents/Obsidian Vault`
+- Vault root: `$OBSIDIAN_VAULT`; otherwise the wrapper uses its local default vault path
 - If output path is omitted, wrapper shows an interactive directory selector
 - Directory selector prioritizes de-duplicated last 3 used paths, then discovered vault directories
 - Wrapper shows a final execution preview and asks for confirmation by default

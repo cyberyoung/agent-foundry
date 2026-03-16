@@ -24,7 +24,7 @@ python3 scripts/fix_image_paths.py <note.md>
 python3 scripts/fix_image_paths.py <note.md> --vault-root /path/to/vault
 ```
 
-Quick wrapper (recommended, accepts vault-relative note path):
+Local convenience wrapper (accepts vault-relative note path):
 
 ```bash
 bash scripts/to_vault.sh <note-path-or-rel> [extra-args...]
@@ -37,7 +37,7 @@ bash scripts/to_vault.sh "research/weekly-review.md" --yes --dry-run
 ```
 
 Wrapper notes:
-- Vault root: `$OBSIDIAN_VAULT`, fallback to `~/Documents/Obsidian Vault`
+- Vault root: `$OBSIDIAN_VAULT`; otherwise the wrapper uses its local default vault path
 - If note path is relative, it is resolved against the vault root
 - `--vault-root` is auto-injected unless explicitly provided
 - Wrapper shows a final execution preview and asks for confirmation by default

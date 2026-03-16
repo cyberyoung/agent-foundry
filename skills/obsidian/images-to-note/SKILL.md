@@ -29,7 +29,7 @@ description: "Generate an Obsidian note from all images in a directory, sorted b
 python3 scripts/images_to_note.py <目录路径> [选项]
 ```
 
-## 快捷方式（推荐）
+## 本地方便包装脚本
 
 ```bash
 bash scripts/to_vault.sh <目录路径> [选项]
@@ -47,7 +47,7 @@ bash scripts/to_vault.sh "research/photos/report-images" --keep-heic
 
 说明：
 
-- 输出基准库目录：`$OBSIDIAN_VAULT`，未设置时默认 `~/Documents/Obsidian Vault`
+- 输出基准库目录：优先使用 `$OBSIDIAN_VAULT`，否则 wrapper 使用本地默认 vault 路径
 - 支持 vault 相对路径和绝对路径
 
 ## 可选参数

@@ -32,7 +32,7 @@ description: Use when a user wants to add missing captions to embedded images in
 ## 脚本入口
 
 - 核心脚本：`scripts/caption_images_in_note.py`
-- 包装脚本：`scripts/to_vault.sh`
+- 本地方便包装脚本：`scripts/to_vault.sh`
 
 ## 工作流
 

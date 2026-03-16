@@ -1,5 +1,5 @@
 ---
-name: docx-to-obsidian
+name: ob-docx-converter
 description: "Convert Word (.docx) files into Obsidian-compatible Markdown notes with full fidelity. Use this skill whenever the user wants to convert a .docx file to Markdown for Obsidian, import Word documents into their vault, or migrate content from Word to Obsidian. Triggers include: any mention of 'docx to markdown', 'Word to Obsidian', 'convert docx', 'import Word document', or requests to turn a .docx file into a note. This skill handles the hard parts that naive converters miss: embedded image extraction, table layout conversion, rich text formatting preservation (highlights, colored text), hierarchical list detection, and chapter TOC generation with anchor links."
 ---
 
@@ -46,7 +46,7 @@ Run:
 python3 <skill-path>/scripts/docx_to_obsidian.py <input.docx> <output-dir>
 ```
 
-Quick wrapper (recommended, vault-relative output path):
+Local convenience wrapper (vault-relative output path):
 
 ```bash
 bash <skill-path>/scripts/to_vault.sh <input.docx> [output-rel-path]
@@ -55,7 +55,7 @@ bash <skill-path>/scripts/to_vault.sh <input.docx> [output-rel-path]
 Examples:
 
 ```bash
-# Interactive output selection (recommended)
+# Interactive output selection
 bash <skill-path>/scripts/to_vault.sh /path/to/report.docx
 
 # Output to a research note directory
@@ -66,7 +66,7 @@ bash <skill-path>/scripts/to_vault.sh /path/to/report.docx "research/notes" --ye
 ```
 
 Wrapper notes:
-- Vault root: `$OBSIDIAN_VAULT`, fallback to `~/Documents/Obsidian Vault`
+- Vault root: `$OBSIDIAN_VAULT`; otherwise the wrapper uses its local default vault path
 - If output path is omitted, wrapper shows an interactive directory selector
 - Directory selector prioritizes de-duplicated last 3 used paths, then discovered vault directories
 - Extra flags are passed through (e.g. `--analyze`, `--no-layout-tables`)
