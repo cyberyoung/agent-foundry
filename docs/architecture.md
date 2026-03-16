@@ -1,44 +1,42 @@
-# Agents Architecture
+# Architecture
 
-## Design Root
+## Purpose
 
-The design root is:
+This repository packages reusable assets for agent workflows. The current public emphasis is on `skills/`, with an initial focus on Obsidian-oriented document and note utilities.
 
-`/Users/liyang/OneDrive/life/etc/agents`
-
-This root currently exposes a public-first view centered on reusable skills.
-
-## Current State
-
-The current public-first shape centers on `skills/` and a small set of root-level documentation.
-
-Current shape:
+## Public-Facing Structure
 
 ```text
-/etc/agents/
-├── skills/
+agent-foundry/
+├── README.md
+├── LICENSE
 ├── docs/
-├── claude.json
-├── dot-claude/
-└── dot-codex/
+└── skills/
 ```
 
-The active work is scoped to `skills/` and the current root-level docs, not to a broader multi-domain rollout.
+## Skills Layout
+
+The current public skill catalog lives under `skills/`.
+
+```text
+skills/
+├── README.md
+└── obsidian/
+    ├── pdf-to-obsidian/
+    ├── docx-converter/
+    ├── fix-image-paths/
+    ├── bookmarks-to-note/
+    ├── images-to-note/
+    └── image-captioner/
+```
+
+## Namespace Rules
+
+- `obsidian/` uses `.prefix = ob`, so runtime names appear as `ob-*`
+- `skill-management/` uses `.prefix = sm`, but that namespace is maintained for internal workflow support and is not part of the public-first catalog
 
 ## Design Principles
 
-- keep `skills/` as the current source-of-truth asset domain
-- keep public-facing docs focused on current facts and current release scope
-- keep runtime distribution separate from source layout
-
-## Current Namespace Decisions
-
-Within `skills/`:
-
-- `obsidian/` is a live namespace with `.prefix = ob`
-- `skill-management/` is a live namespace with `.prefix = sm`
-- `find-skills/` remains standalone and upstream-sourced
-
-## Compatibility Constraint
-
-The current sync/discovery mechanism exposes namespace children only when the namespace directory has a `.prefix` file. This is why `skill-management/` required `.prefix = sm` when it became a real namespace.
+- keep each skill independently understandable and installable
+- keep public docs focused on current capabilities, not internal planning history
+- separate public skill interfaces from local convenience wrappers when they serve different purposes

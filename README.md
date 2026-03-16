@@ -1,47 +1,41 @@
-# Agents
+# Agent Foundry
 
-Source tree for reusable agent assets.
+A collection of reusable assets for agent workflows, starting with Obsidian-focused skills for document conversion and note maintenance.
 
-This repository is being shaped so `/Users/liyang/OneDrive/life/etc/agents` can serve as the future public repository root. The current public-first scope is limited to selected skills under `skills/obsidian/`.
+## Included Skills
 
-## Current Scope
+The current public set includes:
 
-`/Users/liyang/OneDrive/life/etc/agents` is the design root for a broader agent repository.
+- `pdf-to-obsidian` - Convert PDF files into Obsidian-compatible Markdown notes.
+- `docx-converter` - Convert Word documents into Obsidian-compatible Markdown notes.
+- `fix-image-paths` - Normalize embedded image paths and local asset layout in notes.
+- `bookmarks-to-note` - Convert Chrome bookmark folders into structured Markdown notes.
+- `images-to-note` - Generate a note from a directory of images.
+- `image-captioner` - Add missing captions to embedded images in a single note.
 
-Today, the only actively implemented asset domain is `skills/`.
+## Quick Start
 
-## Current Implementation Boundary
+Install a skill by copying or symlinking its directory into your runtime's skills directory.
 
-The working implementation is currently centered on:
+Example:
 
-- `skills/`
-- `docs/`
+```bash
+ln -s /path/to/agent-foundry/skills/obsidian/pdf-to-obsidian ~/.config/opencode/skills/ob-pdf-to-obsidian
+```
 
-Within `skills/`, the active namespaces are:
+See `docs/installation.md` for more installation options.
 
-- `obsidian/` exposed as `ob-*`
-- `skill-management/` exposed as `sm-*`
+## Repository Layout
 
-`find-skills/` remains a standalone upstream skill at the top level of the `skills/` subtree.
+- `skills/` - public skill catalog
+- `docs/` - repository-level installation, structure, and compatibility notes
 
-## Runtime Distribution
+## Skill Namespaces
 
-Skills are synced into:
+- `obsidian/` - publicly exposed as `ob-*`
+- `skill-management/` - internal maintenance namespace, not part of the public-first set
 
-- `~/.claude/skills`
-- `~/.codex/skills`
-- `~/.config/opencode/skills`
-
-## Public-First Scope
-
-The initial public-facing skill set is centered on:
-
-- `skills/obsidian/pdf-to-obsidian/`
-- `skills/obsidian/docx-converter/`
-- `skills/obsidian/fix-image-paths/`
-- `skills/obsidian/bookmarks-to-note/`
-
-See:
+## Learn More
 
 - `docs/installation.md`
 - `docs/structure.md`

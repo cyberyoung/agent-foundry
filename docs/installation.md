@@ -21,7 +21,7 @@ cp -R skills/obsidian/pdf-to-obsidian ~/.config/opencode/skills/ob-pdf-to-obsidi
 Example:
 
 ```bash
-ln -s /path/to/agents/skills/obsidian/pdf-to-obsidian ~/.config/opencode/skills/ob-pdf-to-obsidian
+ln -s /path/to/agent-foundry/skills/obsidian/pdf-to-obsidian ~/.config/opencode/skills/ob-pdf-to-obsidian
 ```
 
 Use the exposed runtime name when creating the destination directory name.
@@ -33,14 +33,16 @@ Examples:
 - `ob-fix-image-paths`
 - `ob-bookmarks-to-note`
 
-## Current Public-First Subset
+## Current Public Catalog
 
-The initial public-facing subset is:
+The current public catalog includes:
 
 - `skills/obsidian/pdf-to-obsidian/`
 - `skills/obsidian/docx-converter/`
 - `skills/obsidian/fix-image-paths/`
 - `skills/obsidian/bookmarks-to-note/`
+- `skills/obsidian/images-to-note/`
+- `skills/obsidian/image-captioner/`
 
 ## Notes
 
