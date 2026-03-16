@@ -1,0 +1,33 @@
+/* cssclasses: table-nowrap */
+.table-nowrap table {
+  width: fit-content;
+  min-width: 80%;
+  max-width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.table-nowrap th,
+.table-nowrap td {
+  padding: 8px 14px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.table-nowrap th {
+  font-weight: 700;
+  background-color: var(--background-secondary);
+}
+
+.table-nowrap tbody tr:nth-child(even) {
+  background-color: var(--background-secondary-alt, rgba(0, 0, 0, 0.03));
+}
+
+.table-nowrap td:not(:last-child),
+.table-nowrap th:not(:last-child) {
+  white-space: nowrap;
+}
+
+.table-nowrap td:last-child,
+.table-nowrap th:last-child {
+  width: 100%;
+}
