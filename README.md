@@ -33,7 +33,6 @@ See `docs/installation.md` for more installation options.
 ## Skill Namespaces
 
 - `obsidian/` - publicly exposed as `ob-*`
-- `skill-management/` - internal maintenance namespace, not part of the public-first set
 
 ## Learn More
 
