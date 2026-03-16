@@ -1,0 +1,133 @@
+{
+  "unclassified_topic": "未分类",
+  "series_patterns": [
+    {
+      "topic": "AI 时代生存指南（系列）",
+      "pattern": "^ai时代生存指南\\d+"
+    }
+  ],
+  "topic_rules": [
+    {
+      "topic": "投资方法与心得",
+      "keywords": [
+        "投资",
+        "策略",
+        "战法",
+        "交易",
+        "获利",
+        "蜕变",
+        "诱惑",
+        "飞龙",
+        "猎豹",
+        "底部擒龙",
+        "高股息"
+      ]
+    },
+    {
+      "topic": "SemiAnalysis 系列",
+      "keywords": [
+        "semianalysis",
+        "semianalylsis"
+      ]
+    },
+    {
+      "topic": "AI 与科技产业",
+      "keywords": [
+        "算力",
+        "硬件",
+        "芯片",
+        "光互联",
+        "数据中心",
+        "nvidia",
+        "amd",
+        "hopper",
+        "intel",
+        "j.p. morgan",
+        "jp morgan"
+      ]
+    },
+    {
+      "topic": "AI 大模型与趋势",
+      "keywords": [
+        "anthropic",
+        "claude",
+        "大模型",
+        "智能体",
+        "强化学习",
+        "rich sutton",
+        "saas",
+        "编程趋势"
+      ]
+    },
+    {
+      "topic": "资讯与日报",
+      "keywords": [
+        "早报",
+        "日报",
+        "快报",
+        "内容升级"
+      ]
+    },
+    {
+      "topic": "问题修复",
+      "keywords": [
+        "fix",
+        "问题",
+        "修复",
+        "错误"
+      ]
+    },
+    {
+      "topic": "功能开发",
+      "keywords": [
+        "增加",
+        "feat",
+        "新增",
+        "add",
+        "功能",
+        "存储Type",
+        "字段联动",
+        "存储单元"
+      ]
+    },
+    {
+      "topic": "PR与代码评审",
+      "keywords": [
+        "changes",
+        "pr",
+        "pull request"
+      ]
+    },
+    {
+      "topic": "菜单与权限",
+      "keywords": [
+        "权限",
+        "menu",
+        "菜单"
+      ]
+    },
+    {
+      "topic": "上传与附件",
+      "keywords": [
+        "upload",
+        "上传",
+        "附件"
+      ]
+    },
+    {
+      "topic": "其它工作记录",
+      "keywords": [
+        "工作记录",
+        "first commit",
+        "Merge branch"
+      ]
+    },
+    {
+      "topic": "调试",
+      "keywords": [
+        "sentry",
+        "debug"
+      ]
+    }
+  ]
+}
