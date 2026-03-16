@@ -2,30 +2,30 @@
 
 This directory contains the public skill catalog for `agent-foundry`.
 
-## Namespaces
+## Current Catalog
 
-- `find-skills/` - standalone upstream skill kept at the top level
-- `obsidian/` - Obsidian-focused skills, exposed with the `ob-` prefix via `obsidian/.prefix`
-- `skill-management/` - internal lifecycle and sync skills, exposed with the `sm-` prefix via `skill-management/.prefix`
+The current public catalog is focused on Obsidian-oriented skills for document conversion and note maintenance.
 
-## Exposure Rules
+## Included Skills
 
-- A top-level directory without `.prefix` is exposed as a standalone skill
-- A top-level directory with `.prefix` is treated as a namespace container
-- Each child skill under a namespaced directory is exposed as `{prefix}-{child-name}`
+- `obsidian/pdf-to-obsidian/` - convert PDF files into Obsidian-compatible Markdown notes
+- `obsidian/docx-converter/` - convert Word documents into Obsidian-compatible Markdown notes
+- `obsidian/fix-image-paths/` - normalize embedded image paths and local asset layout in notes
+- `obsidian/bookmarks-to-note/` - convert Chrome bookmark folders into structured Markdown notes
+- `obsidian/images-to-note/` - generate a note from a directory of images
+- `obsidian/image-captioner/` - add missing captions to embedded images in a single note
 
-## Current Runtime Namespaces
+## Runtime Names
 
-- `ob-*` for `obsidian/`
-- `sm-*` for `skill-management/`
+Published Obsidian skills are exposed with the `ob-` prefix in supported runtimes.
 
-## Public Skill Set
+Examples:
 
-- `obsidian/pdf-to-obsidian/`
-- `obsidian/docx-converter/`
-- `obsidian/fix-image-paths/`
-- `obsidian/bookmarks-to-note/`
-- `obsidian/images-to-note/`
-- `obsidian/image-captioner/`
+- `ob-pdf-to-obsidian`
+- `ob-docx-converter`
+- `ob-fix-image-paths`
+- `ob-bookmarks-to-note`
+- `ob-images-to-note`
+- `ob-image-captioner`
 
-See root-level public docs for install, structure, and compatibility guidance.
+See the root-level public docs for install, structure, and compatibility guidance.
