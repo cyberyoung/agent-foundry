@@ -10,7 +10,7 @@ The active skills system syncs into:
 - `~/.codex/skills`
 - `~/.config/opencode/skills`
 
-## First-Wave Skills
+## Public Skill Set
 
 ### `pdf-to-obsidian`
 
@@ -31,6 +31,17 @@ The active skills system syncs into:
 
 - runtime name: `ob-bookmarks-to-note`
 - requires: `python3`, access to Chrome bookmarks JSON input
+
+### `images-to-note`
+
+- runtime name: `ob-images-to-note`
+- requires: `python3`
+- optional platform-specific dependency: macOS `sips` for HEIC conversion
+
+### `image-captioner`
+
+- runtime name: `ob-image-captioner`
+- requires: `python3`
 
 ## Wrapper Notes
 

@@ -1,8 +1,6 @@
 # Skills
 
-Shared skill source tree for `/Users/liyang/OneDrive/life/etc/agents`.
-
-For the initial public-facing repository shape, the published subset is the first-wave Obsidian skills under `obsidian/`.
+This directory contains the public skill catalog for `agent-foundry`.
 
 ## Namespaces
 
@@ -21,11 +19,13 @@ For the initial public-facing repository shape, the published subset is the firs
 - `ob-*` for `obsidian/`
 - `sm-*` for `skill-management/`
 
-## Public-First Published Subset
+## Public Skill Set
 
 - `obsidian/pdf-to-obsidian/`
 - `obsidian/docx-converter/`
 - `obsidian/fix-image-paths/`
 - `obsidian/bookmarks-to-note/`
+- `obsidian/images-to-note/`
+- `obsidian/image-captioner/`
 
 See root-level public docs for install, structure, and compatibility guidance.
