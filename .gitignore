@@ -1,0 +1,25 @@
+# Local runtime and config state
+.claude.json.backup
+claude.json
+dot-claude/
+dot-codex/
+
+# Internal-only docs
+docs/public-scope.md
+
+# Excluded skills and internal namespaces
+skills/find-skills/
+skills/skill-management/
+skills/docs/
+skills/obsidian/topic-tracker-note/
+skills/obsidian/wx-article-digest/
+skills/obsidian/images-to-note/
+skills/obsidian/image-captioner/
+skills/obsidian/fix-image-paths/scripts/weekly_stock_fix.sh
+skills/obsidian/bookmarks-to-note/scripts/to_stock_inbox.sh
+
+# Local residue
+**/__pycache__/
+**/*.pyc
+**/.DS_Store
+**/.to_vault_output_history
