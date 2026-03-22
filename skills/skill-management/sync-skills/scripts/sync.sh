@@ -70,10 +70,10 @@ done
 
 # Clean stale symlinks (broken symlinks not matched by glob, use find)
 for target_dir in "${TARGETS[@]}"; do
-	find "$target_dir" -maxdepth 1 -type l ! -exec test -e {} \; -print | while read -r link_path; do
+	while IFS= read -r -d '' link_path; do
 		echo "[removed] $link_path (stale)"
-		rm "$link_path"
-	done
+		rm -- "$link_path"
+	done < <(find "$target_dir" -maxdepth 1 -type l ! -exec test -e {} \; -print0)
 done
 
 echo ""
