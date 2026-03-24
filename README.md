@@ -20,6 +20,7 @@ Install a skill by copying or symlinking its directory into your runtime's skill
 Example:
 
 ```bash
+mkdir -p ~/.config/opencode/skills
 ln -s /path/to/agent-foundry/skills/obsidian/pdf-to-obsidian ~/.config/opencode/skills/ob-pdf-to-obsidian
 ```
 
@@ -37,6 +38,15 @@ See `docs/installation.md` for more installation options.
 ## Learn More
 
 - `docs/installation.md`
-- `docs/structure.md`
-- `docs/compatibility.md`
+- `skills/docs/authoring.md`
+- `docs/architecture.md`
 - `skills/README.md`
+
+## Document Index (root + docs/)
+
+| Document | Scope | Description |
+| --- | --- | --- |
+| `README.md` | repo root | Repository entrypoint: scope, quick start, and top-level navigation. |
+| `docs/architecture.md` | root docs | Architecture and namespace design (`obsidian`/`skill-management`) and public-facing principles. |
+| `docs/installation.md` | root docs | Install existing skills by copy/symlink and runtime target conventions. |
+| `docs/public-scope.md` | root docs | Public/private boundary control, included/excluded paths, and rationale. |

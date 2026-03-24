@@ -19,6 +19,10 @@ The current public catalog is focused on Obsidian-oriented skills for document c
 
 Published Obsidian skills are exposed with the `ob-` prefix in supported runtimes.
 
+If you want to create a new skill from scratch and install it locally, see:
+
+- `docs/authoring.md`
+
 Examples:
 
 - `ob-pdf-to-obsidian`
@@ -29,3 +33,16 @@ Examples:
 - `ob-image-captioner`
 
 See the root-level public docs for install, structure, and compatibility guidance.
+
+## Document Index (skills/)
+
+This index lists all Markdown documents under `skills/docs/`.
+
+| Document | Description |
+| --- | --- |
+| `docs/authoring.md` | End-to-end runbook for skill authoring and local deployment. |
+| `docs/compatibility.md` | Runtime compatibility and exposed-name rules for synced skills. |
+| `docs/first-release-gap-analysis.md` | Gap matrix and readiness analysis for first public release. |
+| `docs/first-release-shortlist.md` | First-wave, second-wave, deferred, and excluded skill shortlist. |
+| `docs/publishing-policy.md` | Publishing policy by source type and release scope. |
+| `docs/structure.md` | Skills tree structure, naming layers, and namespace behavior. |
