@@ -112,6 +112,14 @@ Every bugfix MUST include TWO deliverables:
 1. **Failing test first, then fix** — reproduce the bug with a test that fails before any implementation change, then fix the code until the test passes
 2. **Prevention assessment** — evaluate whether the bug pattern needs a new rule in AGENTS.md, workflow skill, or check:ci. Document conclusion (even if "no new rule needed — existing rule X covers it")
 
+#### Route Permission Check (MANDATORY when adding/modifying routes or page operations)
+
+If the changeset includes new or modified routes (`src/routes/`) or page operations (`_operations` / `engName`):
+
+1. For each `_operations` entry with an `engName`, verify a matching `action` exists in the corresponding route file (`src/routes/{domain}.tsx`)
+2. For each new `action` in a route file, verify it is consumed by an `_operations` `engName` in the page component
+3. Missing matches → fix before proceeding. Non-admin users will get invisible buttons or 403 errors.
+
 ## Red Flags — STOP Immediately
 
 | Thought                                         | Reality                                                            |
