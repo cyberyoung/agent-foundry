@@ -23,6 +23,7 @@ agent-foundry/
 ├── README.md
 ├── LICENSE
 ├── docs/
+├── scripts/
 ├── skills/
 ├── claude.json
 ├── dot-claude/
@@ -76,6 +77,27 @@ skills/
 
 - `obsidian/` uses `.prefix = ob`, so runtime names appear as `ob-*`
 - `skill-management/` uses `.prefix = sm`, but that namespace is maintained for internal workflow support and is not part of the public-first catalog
+
+## Command Domains
+
+Global commands are split into two domains, each with its own restore script for new-machine recovery:
+
+### opencode domain
+
+Profile and health commands for Oh-My-OpenCode. Source lives in `~/.config/opencode/`.
+
+- `omop` / `omo-profile` — profile management
+- `omo-health` / `omop-health` — model health check
+- `restore-opencode-links` — restore opencode-domain symlinks
+
+### agents domain
+
+Skill lifecycle commands for this repository. Source lives in `scripts/`.
+
+- `sm-lifecycle` — upstream skill onboarding, upgrade, and verification
+- `restore-agents-link` — restore agents-domain symlinks
+
+Both restore scripts are self-locating (derive paths from `BASH_SOURCE[0]`), so they work regardless of clone location.
 
 ## Design Principles
 

@@ -50,3 +50,4 @@ See `docs/installation.md` for more installation options.
 | `docs/architecture.md` | root docs | Architecture and namespace design (`obsidian`/`skill-management`) and public-facing principles. |
 | `docs/installation.md` | root docs | Install existing skills by copy/symlink and runtime target conventions. |
 | `docs/public-scope.md` | root docs | Public/private boundary control, included/excluded paths, and rationale. |
+| `skills/skill-management/skills-upstream-manager/upstream-lifecycle.md` | skill-management | Upstream skill onboarding, upgrade, rollback, and recovery SOP. |
