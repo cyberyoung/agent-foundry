@@ -16,13 +16,28 @@ Enforce disciplined bug fixing: failing test → minimal fix → prevention asse
 - Regression from a recent change
 - Single-file or multi-file fixes alike
 
-**If multi-file:** also load `wf-branch-workflow` for branch + plan discipline. This skill handles the fix process within whatever branch workflow you're using.
-
 ## The Flow
 
 ```
-Reproduce ──gate──▶ Failing Test ──gate──▶ Fix ──gate──▶ Prevent ──▶ Done
+Branch ──▶ Reproduce ──gate──▶ Failing Test ──gate──▶ Fix ──gate──▶ Prevent ──▶ Done
 ```
+
+## Phase 0: Branch
+
+Never fix directly on main — no exceptions, no matter how small.
+
+1. Check current state:
+
+```bash
+git branch --show-current && git status --short
+```
+
+2. Decide:
+   - **On a `fix/` branch** → use it as-is (multiple bugs on one branch is fine)
+   - **On main** → create a fix branch: `git checkout -b fix/<bug-name>`
+   - **On any other branch** → switch to main first, then create a fix branch: `git checkout main && git checkout -b fix/<bug-name>`
+
+**Gate: You must NOT be on main before any code changes.**
 
 ## Phase 1: Reproduce
 
@@ -93,3 +108,4 @@ Evaluate whether the bug pattern needs systemic prevention:
 | "I'll also clean up the surrounding code" | Minimal fix only. Refactoring is a separate task. |
 | "I should add a rule to prevent this" | Only after the fix is verified. Rules based on unverified fixes are premature. |
 | "The fix works in my head, no need to run the test" | Run the test. Always. |
+| "It's a one-liner, I'll fix it on main" | Not on main. Switch to or create a branch first. |
