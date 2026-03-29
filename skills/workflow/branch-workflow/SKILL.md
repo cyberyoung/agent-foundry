@@ -83,18 +83,51 @@ For every API path mentioned in user requirements:
 - ✅ Ask user for every missing interface document
 - ✅ Only proceed when ALL interfaces are verified
 
-### Phase 1: Plan (on main, BEFORE branching)
+### Phase 0.9: PRD Check
 
-3. Read project AGENTS.md for conventions (naming, `.sisyphus/` structure, commit style).
-4. Create design doc: `.sisyphus/designs/{plan-name}-design.md`
-   - Problem statement, approach, affected files, API summary
-   - **MUST include "Interface Dependencies" section listing all APIs with `[CONFIRMED]` status**
-5. Create work plan: `.sisyphus/plans/{plan-name}.md`
-   - Task breakdown with checkboxes
-   - Branch name: `feature/{plan-name}`
-   - Base branch + commit hash
-   - Commit strategy
-6. **STOP. Present plan to user. Wait for explicit approval.**
+Check if `docs/prds/` has a PRD document for this task. If not, ask the user to write one first. The PRD is the user's description of the requirements — do not write it yourself.
+
+### Phase 1: Design
+
+Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md` → `{name}` = `foo`.
+
+**Provider dispatch:**
+1. Check if the PRD has a "Workflow Providers" section → use it for `design` phase
+2. Otherwise read AGENTS.md "Workflow Providers" table for `design` phase
+3. Neither exists → manual
+
+**Provider invocation instructions:**
+- Output to `docs/designs/{name}.md`
+- Link to PRD in `docs/prds/`
+- Use `docs/PLAN_TEMPLATE.md` as template if available
+
+**If provider is a skill name:** Invoke that skill with above instructions.
+**If manual:** You are the provider — write the design doc yourself.
+
+**Post-completion verification:**
+- File `docs/designs/{name}.md` exists
+- Contains: problem statement, approach, affected files, API summary
+- Contains: "Interface Dependencies" section, all APIs marked `[CONFIRMED]`
+
+**Then:** Update `docs/README.md` index. **STOP. Present design to user. Wait for approval.**
+
+### Phase 1.5: Plan
+
+**Provider dispatch:** Same lookup as Phase 1, but for `plan` phase.
+
+**Provider invocation instructions:**
+- Output to `docs/plans/{name}.md`
+- Must include: task breakdown with checkboxes, branch name `feature/{name}`, base branch + commit hash, commit strategy
+
+**If provider is a skill name:** Invoke that skill with above instructions.
+**If manual:** You are the provider — write the plan yourself.
+
+**Post-completion verification:**
+- File `docs/plans/{name}.md` exists
+- Contains: task breakdown with checkboxes
+- Contains: branch name, base branch + commit hash, commit strategy
+
+**Then:** Update `docs/README.md` index. **STOP. Present plan to user. Wait for approval.**
 
 ### Phase 2: Branch + Commit Plan
 
@@ -102,6 +135,12 @@ For every API path mentioned in user requirements:
 8. Commit plan artifacts: `git add .sisyphus/ && git commit -m "plan({domain}): {plan-name}"`
 
 ### Phase 3: Build (feature branch only)
+
+**Provider dispatch:** Look up `execute` phase provider (same lookup as Phase 1).
+
+**If provider is a skill name:** Invoke that skill, instruct it to execute `docs/plans/{name}.md`. After completion, run CI check.
+
+**If manual:** Execute the plan tasks yourself:
 
 9. All edits on the feature branch — never switch back to main
 10. Track progress with TodoWrite
@@ -140,8 +179,13 @@ If the changeset includes new or modified routes (`src/routes/`) or page operati
 2. For each new `action` in a route file, verify it is consumed by an `_operations` `engName` in the page component
 3. Missing matches → fix before proceeding. Non-admin users will get invisible buttons or 403 errors.
 
-### Phase 4: Present
+### Phase 4: Ship
 
+**Provider dispatch:** Look up `ship` phase provider (same lookup as Phase 1).
+
+**If provider is a skill name:** Invoke that skill to complete the development branch.
+
+**If manual:**
 12. Show summary of changes to user
 13. Do NOT push or create PR without explicit request
 
@@ -166,11 +210,12 @@ If the changeset includes new or modified routes (`src/routes/`) or page operati
 | Step          | Where  | Action                               |
 | ------------- | ------ | ------------------------------------ |
 | Classify task | —      | Count files, pick workflow           |
-| Create design | main   | `.sisyphus/designs/{name}-design.md` |
-| Create plan   | main   | `.sisyphus/plans/{name}.md`          |
+| Create design | main   | `docs/designs/{name}-design.md`      |
+| Create plan   | main   | `docs/plans/{name}.md`               |
+| Update index  | main   | Update `docs/README.md`              |
 | Human gate    | main   | Present plan, wait for approval      |
 | Create branch | main   | `git checkout -b feature/{name}`     |
-| Commit plan   | branch | Commit `.sisyphus/` artifacts        |
+| Commit plan   | branch | Commit `docs/` artifacts             |
 | Implement     | branch | Code, test, track with todos         |
 | Verify        | branch | Run CI gate command                  |
 | Present       | branch | Show changes, await instructions     |

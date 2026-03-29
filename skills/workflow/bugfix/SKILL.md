@@ -19,7 +19,7 @@ Enforce disciplined bug fixing: failing test → minimal fix → prevention asse
 ## The Flow
 
 ```
-Branch ──▶ Reproduce ──gate──▶ Failing Test ──gate──▶ Fix ──gate──▶ Prevent ──▶ Done
+Branch ──▶ Reproduce ──gate──▶ Plan Review ──gate──▶ Failing Test ──gate──▶ Fix ──gate──▶ Prevent ──▶ Done
 ```
 
 ## Phase 0: Branch
@@ -39,13 +39,51 @@ git branch --show-current && git status --short
 
 **Gate: You must NOT be on main before any code changes.**
 
+## Phase 0.5: PRD Check
+
+Check if `docs/prds/` has a PRD document for this bug. If not, ask the user to write one first. The PRD is the user's description of the problem — do not write it yourself.
+
 ## Phase 1: Reproduce
 
-1. Understand the bug — read the report, screenshot, or error message
+1. Understand the bug — read the PRD and any additional report, screenshot, or error message
 2. Identify the affected code — find the component/function/module
 3. Describe the root cause in one sentence before proceeding
 
 **Gate: Can you explain WHY it's broken? If not, keep investigating.**
+
+## Phase 1.5: Plan Review (mandatory)
+
+Before writing any code or tests:
+
+Derive `{name}` from the PRD filename (strip extension), or from the bug name if no PRD exists.
+
+**Provider dispatch (design phase only):**
+1. Check if a PRD exists and has a "Workflow Providers" section → use it for `design` phase
+2. Otherwise read AGENTS.md "Workflow Providers" table for `design` phase
+3. Neither exists → manual
+
+**Provider invocation instructions:**
+- Output to `docs/designs/{name}.md`
+- Link to PRD in `docs/prds/` if exists
+
+**If provider is a skill name:** Invoke that skill with above instructions.
+**If manual:** You are the provider — write the design doc yourself.
+
+**Post-completion verification:**
+- File `docs/designs/{name}.md` exists
+- Contains: root cause (what's broken and why)
+- Contains: fix approach (which files, which lines, what the change looks like)
+- Contains: test plan (what tests to write, what they assert, which files)
+- Contains: execution order (step-by-step sequence including regression checks)
+
+**Then:** Update `docs/README.md` artifact index. **Present plan to user. Wait for explicit approval.**
+
+**Gate: The user must explicitly approve the plan before you proceed. Do NOT start Phase 2 until the user confirms.** If the user requests changes to the plan, update it and wait for approval again.
+
+This gate exists because:
+- Fixing the wrong root cause wastes everyone's time
+- The user may have context you don't (e.g., which compType actually triggers the bug)
+- Reviewing a plan is cheap; reverting an incorrect fix is expensive
 
 ## Phase 2: Failing Test
 
@@ -102,7 +140,8 @@ Evaluate whether the bug pattern needs systemic prevention:
 
 | Thought | Reality |
 |---------|---------|
-| "I know the fix, let me just do it quickly" | Failing test first. No exceptions. |
+| "I know the fix, let me just do it quickly" | Plan review first, then failing test. No exceptions. |
+| "The plan is obvious, no need to confirm" | Present it anyway. The user may have context you lack. |
 | "The test is hard to write, I'll skip it" | Explain to user and get approval. Never skip silently. |
 | "Let me fix first, then write a regression test" | That's backwards. Test proves the bug exists before you fix it. |
 | "I'll also clean up the surrounding code" | Minimal fix only. Refactoring is a separate task. |

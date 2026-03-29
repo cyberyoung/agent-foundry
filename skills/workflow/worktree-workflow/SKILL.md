@@ -61,19 +61,50 @@ For every API path mentioned in user requirements:
 - ✅ Ask user for every missing interface document
 - ✅ Only proceed when ALL interfaces are verified
 
-### Phase 1: Plan on MAIN
+### Phase 0.9: PRD Check
 
-Read project AGENTS.md `GIT WORKFLOW` section for project-specific conventions (naming, plan template path, `.sisyphus/` structure).
+Check if `docs/prds/` has a PRD document for this task. If not, ask the user to write one first. The PRD is the user's description of the requirements — do not write it yourself.
 
-1. Create design doc in **main repo** planning directory
-   - **MUST include "Interface Dependencies" section listing all APIs with `[CONFIRMED]` status**
-2. Create work plan in **main repo** planning directory — MUST include:
-   - Branch name
-   - Base branch + commit hash
-   - Worktree path
-   - Commit strategy
-   - Merge method
-3. **STOP. Present plan to user. Wait for approval.**
+### Phase 1: Design (on MAIN)
+
+Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md` → `{name}` = `foo`.
+
+**Provider dispatch:**
+1. Check if the PRD has a "Workflow Providers" section → use it for `design` phase
+2. Otherwise read AGENTS.md "Workflow Providers" table for `design` phase
+3. Neither exists → manual
+
+**Provider invocation instructions:**
+- Output to `docs/designs/{name}.md`
+- Link to PRD in `docs/prds/`
+- Use `docs/PLAN_TEMPLATE.md` as template if available
+
+**If provider is a skill name:** Invoke that skill with above instructions.
+**If manual:** You are the provider — write the design doc yourself.
+
+**Post-completion verification:**
+- File `docs/designs/{name}.md` exists
+- Contains: problem statement, approach, affected files, API summary
+- Contains: "Interface Dependencies" section, all APIs marked `[CONFIRMED]`
+
+**Then:** Update `docs/README.md` index. **STOP. Present design to user. Wait for approval.**
+
+### Phase 1.5: Plan (on MAIN)
+
+**Provider dispatch:** Same lookup as Phase 1, but for `plan` phase.
+
+**Provider invocation instructions:**
+- Output to `docs/plans/{name}.md`
+- Must include: branch name, base branch + commit hash, worktree path, commit strategy, merge method
+
+**If provider is a skill name:** Invoke that skill with above instructions.
+**If manual:** You are the provider — write the plan yourself.
+
+**Post-completion verification:**
+- File `docs/plans/{name}.md` exists
+- Contains: branch name, base branch + commit hash, worktree path, commit strategy, merge method
+
+**Then:** Update `docs/README.md` index. **STOP. Present plan to user. Wait for approval.**
 
 ### Phase 2: Start (main → worktree)
 
@@ -84,6 +115,11 @@ Read project AGENTS.md `GIT WORKFLOW` section for project-specific conventions (
 
 ### Phase 3: Build (worktree only)
 
+**Provider dispatch:** Look up `execute` phase provider (same lookup as Phase 1).
+
+**If provider is a skill name:** Invoke that skill, instruct it to execute `docs/plans/{name}.md`. After completion, run CI check.
+
+**If manual:**
 8. All edits in worktree — never touch main
 9. Install deps, verify clean baseline
 
@@ -119,6 +155,14 @@ If the changeset includes new or modified routes (`src/routes/`) or page operati
 1. For each `_operations` entry with an `engName`, verify a matching `action` exists in the corresponding route file (`src/routes/{domain}.tsx`)
 2. For each new `action` in a route file, verify it is consumed by an `_operations` `engName` in the page component
 3. Missing matches → fix before proceeding. Non-admin users will get invisible buttons or 403 errors.
+
+### Phase 4: Ship
+
+**Provider dispatch:** Look up `ship` phase provider (same lookup as Phase 1).
+
+**If provider is a skill name:** Invoke that skill to complete the development branch.
+
+**If manual:** Show summary of changes to user. Do NOT push or create PR without explicit request.
 
 ## Red Flags — STOP Immediately
 
@@ -159,9 +203,10 @@ This is optional — the skill works standalone — but projects with the templa
 
 | Step            | Where    | Command               |
 | --------------- | -------- | --------------------- |
-| Create design   | main     | Write to planning dir |
-| Create plan     | main     | Write to planning dir |
-| Human gate      | main     | Present and wait      |
+| Create design   | main     | `docs/designs/{name}-design.md` |
+| Create plan     | main     | `docs/plans/{name}.md`          |
+| Update index    | main     | Update `docs/README.md`         |
+| Human gate      | main     | Present and wait                |
 | Create worktree | main     | `git worktree add`    |
 | Move artifacts  | main→wt  | `mv` planning files   |
 | Verify main     | main     | No plan files remain  |
