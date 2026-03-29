@@ -316,14 +316,16 @@ def resolve_source_dir(
     repo_root: Path, upstream_skill: str, source_path: str | None
 ) -> tuple[Path, str]:
     candidates: list[Path] = []
-    if source_path:
+    if source_path and source_path != ".":
         candidates.append(repo_root / source_path)
     else:
         candidates.append(repo_root / "skills" / upstream_skill)
         candidates.append(repo_root / upstream_skill)
+    candidates.append(repo_root)
     for candidate in candidates:
         if candidate.is_dir() and (candidate / "SKILL.md").exists():
-            return candidate, candidate.relative_to(repo_root).as_posix()
+            rel = candidate.relative_to(repo_root).as_posix()
+            return candidate, rel if rel != "." else ""
     names = ", ".join(str(p.relative_to(repo_root)) for p in candidates)
     raise FileNotFoundError(f"No valid skill directory found. Checked: {names}")
 
@@ -358,36 +360,123 @@ def replace_dir_atomically(
         shutil.rmtree(backup_dir)
 
 
+GITIGNORE_PATH = AGENTS_ROOT / ".gitignore"
+GITIGNORE_MARKER = "# Upstream skills (installed via sm-lifecycle, auto-managed)"
+
+
+def _ensure_gitignore(dest_name: str) -> None:
+    gitignore_entry = f"skills/{dest_name}/"
+    if not GITIGNORE_PATH.exists():
+        return
+    content = GITIGNORE_PATH.read_text(encoding="utf-8")
+    if gitignore_entry in content:
+        return
+    lines = content.splitlines()
+    try:
+        marker_idx = lines.index(GITIGNORE_MARKER)
+    except ValueError:
+        lines.append("")
+        lines.append(GITIGNORE_MARKER)
+        marker_idx = len(lines) - 1
+    insert_idx = marker_idx + 1
+    while insert_idx < len(lines) and lines[insert_idx].startswith("skills/"):
+        insert_idx += 1
+    lines.insert(insert_idx, gitignore_entry)
+    GITIGNORE_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _copy_and_register(
+    source_dir: Path,
+    dest_name: str,
+    spec: UpstreamSpec,
+    resolved_source_path: str,
+    force: bool,
+    collection: str | None = None,
+) -> None:
+    target_dir = SKILLS_ROOT / dest_name
+    replace_dir_atomically(source_dir, target_dir, allow_replace=force)
+
+    registry = load_registry()
+    entry: dict[str, str] = {
+        "source_type": "upstream",
+        "repo_input": spec.repo_input,
+        "owner_repo": spec.owner_repo,
+        "clone_url": spec.clone_url,
+        "upstream_skill": spec.upstream_skill,
+        "source_path": resolved_source_path,
+        "ref": spec.ref,
+        "updated_at": now_iso(),
+    }
+    if collection:
+        entry["collection"] = collection
+    registry[dest_name] = entry
+    save_registry(registry)
+
+    _ensure_gitignore(dest_name)
+
+    print(
+        f"Installed: {dest_name} <- {spec.owner_repo}:{resolved_source_path}@{spec.ref}"
+    )
+
+
+def discover_skills_in_dir(base_dir: Path) -> list[tuple[Path, str, str]]:
+    skills: list[tuple[Path, str, str]] = []
+    for skill_md in sorted(base_dir.rglob("SKILL.md")):
+        skill_dir = skill_md.parent
+        if skill_dir == base_dir:
+            continue
+        rel_path = skill_dir.relative_to(base_dir).as_posix()
+        skills.append((skill_dir, skill_dir.name, rel_path))
+    return skills
+
+
 def install_one(spec: UpstreamSpec, sync_after: bool, force: bool) -> None:
     repo_root = prepare_repo(spec.clone_url, spec.ref)
     try:
         source_dir, resolved_source_path = resolve_source_dir(
             repo_root, spec.upstream_skill, spec.source_path
         )
-        target_dir = SKILLS_ROOT / spec.dest_name
-        replace_dir_atomically(source_dir, target_dir, allow_replace=force)
-
-        registry = load_registry()
-        registry[spec.dest_name] = {
-            "source_type": "upstream",
-            "repo_input": spec.repo_input,
-            "owner_repo": spec.owner_repo,
-            "clone_url": spec.clone_url,
-            "upstream_skill": spec.upstream_skill,
-            "source_path": resolved_source_path,
-            "ref": spec.ref,
-            "updated_at": now_iso(),
-        }
-        save_registry(registry)
+        _copy_and_register(
+            source_dir, spec.dest_name, spec, resolved_source_path, force
+        )
     finally:
         shutil.rmtree(repo_root.parent)
 
     if sync_after:
         run_cmd(["bash", str(SYNC_SCRIPT)])
 
-    print(
-        f"Installed: {spec.dest_name} <- {spec.owner_repo}:{resolved_source_path}@{spec.ref}"
-    )
+
+def install_collection(spec: UpstreamSpec, sync_after: bool, force: bool) -> None:
+    repo_root = prepare_repo(spec.clone_url, spec.ref)
+    try:
+        search_base = repo_root
+        if spec.source_path and spec.source_path not in (".", ""):
+            candidate = repo_root / spec.source_path
+            if candidate.is_dir():
+                search_base = candidate
+
+        skills = discover_skills_in_dir(search_base)
+        if not skills:
+            raise FileNotFoundError(
+                f"No skills found under {search_base.relative_to(repo_root)}"
+            )
+
+        print(f"Collection: {spec.owner_repo} ({len(skills)} skills)")
+        for skill_dir, skill_name, _ in skills:
+            resolved = skill_dir.relative_to(repo_root).as_posix()
+            _copy_and_register(
+                skill_dir,
+                skill_name,
+                spec,
+                resolved,
+                force,
+                collection=spec.owner_repo,
+            )
+    finally:
+        shutil.rmtree(repo_root.parent)
+
+    if sync_after:
+        run_cmd(["bash", str(SYNC_SCRIPT)])
 
 
 def command_install(args: argparse.Namespace) -> None:
@@ -401,7 +490,43 @@ def command_install(args: argparse.Namespace) -> None:
         source_path=str(args.source_path) if args.source_path else None,
         ref=str(args.ref),
     )
-    install_one(spec, sync_after=not bool(args.no_sync), force=bool(args.force))
+    sync_after = not bool(args.no_sync)
+    force = bool(args.force)
+
+    repo_root = prepare_repo(spec.clone_url, spec.ref)
+    try:
+        try:
+            source_dir, resolved_source_path = resolve_source_dir(
+                repo_root, spec.upstream_skill, spec.source_path
+            )
+            _copy_and_register(
+                source_dir, spec.dest_name, spec, resolved_source_path, force
+            )
+        except FileNotFoundError:
+            search_base = repo_root
+            if spec.source_path and spec.source_path not in (".", ""):
+                candidate = repo_root / spec.source_path
+                if candidate.is_dir():
+                    search_base = candidate
+            skills = discover_skills_in_dir(search_base)
+            if not skills:
+                raise
+            print(f"Collection: {spec.owner_repo} ({len(skills)} skills)")
+            for skill_dir, skill_name, _ in skills:
+                resolved = skill_dir.relative_to(repo_root).as_posix()
+                _copy_and_register(
+                    skill_dir,
+                    skill_name,
+                    spec,
+                    resolved,
+                    force,
+                    collection=spec.owner_repo,
+                )
+    finally:
+        shutil.rmtree(repo_root.parent)
+
+    if sync_after:
+        run_cmd(["bash", str(SYNC_SCRIPT)])
 
 
 def command_update(args: argparse.Namespace) -> None:
@@ -410,7 +535,14 @@ def command_update(args: argparse.Namespace) -> None:
         print(f"No upstream skills tracked in {REGISTRY_PATH}")
         return
     targets: list[str]
-    if args.skill:
+    if args.collection:
+        coll = str(args.collection)
+        targets = sorted(
+            name for name, item in registry.items() if item.get("collection") == coll
+        )
+        if not targets:
+            raise KeyError(f"No skills found for collection: {coll}")
+    elif args.skill:
         target = str(args.skill)
         if target not in registry:
             raise KeyError(f"Skill not tracked in registry: {target}")
@@ -470,6 +602,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = parser_update.add_argument(
         "--skill", help="Update one tracked local skill name"
+    )
+    _ = parser_update.add_argument(
+        "--collection",
+        help="Update all skills from a collection (e.g. kepano/obsidian-skills)",
     )
     _ = parser_update.add_argument(
         "--no-sync", action="store_true", help="Skip sync.sh after update"

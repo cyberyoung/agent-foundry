@@ -7,8 +7,15 @@ dot-codex/
 # Internal-only docs
 docs/public-scope.md
 
-# Excluded skills and internal namespaces
+# Upstream skills (installed via sm-lifecycle, auto-managed)
 skills/find-skills/
+skills/defuddle/
+skills/json-canvas/
+skills/obsidian-bases/
+skills/obsidian-cli/
+skills/obsidian-markdown/
+
+# Internal namespaces
 skills/skill-management/
 skills/docs/
 skills/obsidian/topic-tracker-note/
