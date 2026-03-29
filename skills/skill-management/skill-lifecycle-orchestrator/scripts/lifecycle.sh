@@ -30,21 +30,32 @@ parse_github_skill_url() {
 		ref="${BASH_REMATCH[3]}"
 		source_path="${BASH_REMATCH[4]}"
 		source_path="${source_path%/SKILL.md}"
+	elif [[ "$cleaned" =~ ^https://github\.com/([^/]+)/([^/]+)/tree/([^/]+)$ ]]; then
+		owner="${BASH_REMATCH[1]}"
+		repo="${BASH_REMATCH[2]}"
+		ref="${BASH_REMATCH[3]}"
+		source_path="."
+	elif [[ "$cleaned" =~ ^https://github\.com/([^/]+)/([^/]+)$ ]]; then
+		owner="${BASH_REMATCH[1]}"
+		repo="${BASH_REMATCH[2]}"
+		ref="main"
+		source_path="."
 	else
 		echo "Unsupported skill URL: $skill_url" >&2
-		echo "Expected GitHub tree/blob URL, e.g." >&2
-		echo "  https://github.com/<owner>/<repo>/tree/<ref>/<path-to-skill-dir>" >&2
-		echo "  https://github.com/<owner>/<repo>/blob/<ref>/<path-to-skill-dir>/SKILL.md" >&2
-		return 1
-	fi
-
-	if [ -z "$source_path" ]; then
-		echo "Cannot resolve source path from URL: $skill_url" >&2
+		echo "Supported formats:" >&2
+		echo "  https://github.com/<owner>/<repo>" >&2
+		echo "  https://github.com/<owner>/<repo>/tree/<ref>" >&2
+		echo "  https://github.com/<owner>/<repo>/tree/<ref>/<path>" >&2
+		echo "  https://github.com/<owner>/<repo>/blob/<ref>/<path>/SKILL.md" >&2
 		return 1
 	fi
 
 	local upstream_skill
-	upstream_skill="${source_path##*/}"
+	if [ "$source_path" = "." ]; then
+		upstream_skill="$repo"
+	else
+		upstream_skill="${source_path##*/}"
+	fi
 	printf "%s\t%s\t%s\t%s\n" "https://github.com/$owner/$repo" "$ref" "$source_path" "$upstream_skill"
 }
 
@@ -60,6 +71,13 @@ Usage:
   lifecycle.sh discover-sync --query <query>
   lifecycle.sh discover-install-sync --query <query> --repo <repo> --skill <skill> [--ref <ref>]
   lifecycle.sh discover-install-sync-verify --query <query> --repo <repo> --skill <skill> [--ref <ref>]
+
+Sync options (passed through to sync.sh):
+  --skip <targets>       Comma-separated target aliases to skip
+  --only <targets>       Comma-separated target aliases to sync (whitelist)
+  --dry-run              Dry-run sync step only (install/update/verify still execute)
+
+Target aliases: claude, codex, opencode, obsidian
 EOF
 }
 
@@ -70,6 +88,26 @@ fi
 
 FLOW="$1"
 shift
+
+SYNC_ARGS=()
+PASSTHROUGH_ARGS=()
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+	--skip | --only)
+		SYNC_ARGS+=("$1" "$2")
+		shift 2
+		;;
+	--dry-run)
+		SYNC_ARGS+=("$1")
+		shift
+		;;
+	*)
+		PASSTHROUGH_ARGS+=("$1")
+		shift
+		;;
+	esac
+done
+set -- "${PASSTHROUGH_ARGS[@]+${PASSTHROUGH_ARGS[@]}}"
 
 case "$FLOW" in
 onboard)
@@ -84,16 +122,16 @@ onboard)
 	fi
 	SKILL_URL="$1"
 	shift
-	bash "$0" install-url-sync-verify --skill-url "$SKILL_URL" "$@"
+	bash "$0" install-url-sync-verify --skill-url "$SKILL_URL" "${SYNC_ARGS[@]+${SYNC_ARGS[@]}}" "$@"
 	bash "$UPM/status-upstream.sh" --compact
 	;;
 install-sync)
-	bash "$UPM/install-upstream.sh" "$@"
-	bash "$SYNC"
+	bash "$UPM/install-upstream.sh" --no-sync "$@"
+	bash "$SYNC" "${SYNC_ARGS[@]+${SYNC_ARGS[@]}}"
 	;;
 install-sync-verify)
-	bash "$UPM/install-upstream.sh" "$@"
-	bash "$SYNC"
+	bash "$UPM/install-upstream.sh" --no-sync "$@"
+	bash "$SYNC" "${SYNC_ARGS[@]+${SYNC_ARGS[@]}}"
 	bash "$VERIFY"
 	;;
 install-url-sync-verify)
@@ -118,21 +156,22 @@ install-url-sync-verify)
 	PARSED="$(parse_github_skill_url "$SKILL_URL")" || exit 1
 	IFS=$'\t' read -r REPO_URL URL_REF SOURCE_PATH URL_SKILL <<<"$PARSED"
 	bash "$UPM/install-upstream.sh" \
+		--no-sync \
 		--repo "$REPO_URL" \
 		--skill "$URL_SKILL" \
 		--source-path "$SOURCE_PATH" \
 		--ref "$URL_REF" \
 		"${INSTALL_ARGS[@]}"
-	bash "$SYNC"
+	bash "$SYNC" "${SYNC_ARGS[@]+${SYNC_ARGS[@]}}"
 	bash "$VERIFY"
 	;;
 update-sync)
-	bash "$UPM/update-upstream.sh" "$@"
-	bash "$SYNC"
+	bash "$UPM/update-upstream.sh" --no-sync "$@"
+	bash "$SYNC" "${SYNC_ARGS[@]+${SYNC_ARGS[@]}}"
 	;;
 update-sync-verify)
-	bash "$UPM/update-upstream.sh" "$@"
-	bash "$SYNC"
+	bash "$UPM/update-upstream.sh" --no-sync "$@"
+	bash "$SYNC" "${SYNC_ARGS[@]+${SYNC_ARGS[@]}}"
 	bash "$VERIFY"
 	;;
 discover-sync)
@@ -177,8 +216,8 @@ discover-install-sync)
 		exit 1
 	fi
 	bash "$DISC/discovery-check.sh" "$QUERY"
-	bash "$UPM/install-upstream.sh" "${INSTALL_ARGS[@]}"
-	bash "$SYNC"
+	bash "$UPM/install-upstream.sh" --no-sync "${INSTALL_ARGS[@]}"
+	bash "$SYNC" "${SYNC_ARGS[@]+${SYNC_ARGS[@]}}"
 	;;
 discover-install-sync-verify)
 	QUERY=""
@@ -200,8 +239,8 @@ discover-install-sync-verify)
 		exit 1
 	fi
 	bash "$DISC/discovery-check.sh" "$QUERY"
-	bash "$UPM/install-upstream.sh" "${INSTALL_ARGS[@]}"
-	bash "$SYNC"
+	bash "$UPM/install-upstream.sh" --no-sync "${INSTALL_ARGS[@]}"
+	bash "$SYNC" "${SYNC_ARGS[@]+${SYNC_ARGS[@]}}"
 	bash "$VERIFY"
 	;;
 *)
