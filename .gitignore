@@ -3,17 +3,14 @@
 claude.json
 dot-claude/
 dot-codex/
+dot-omc/
+dot-omx/
 
 # Internal-only docs
 docs/public-scope.md
 
-# Upstream skills (installed via sm-lifecycle, auto-managed)
-skills/find-skills/
-skills/defuddle/
-skills/json-canvas/
-skills/obsidian-bases/
-skills/obsidian-cli/
-skills/obsidian-markdown/
+# Upstream skills (fallback copies in .upstream/, managed by skills-manager daily)
+skills/.upstream/
 
 # Internal namespaces
 skills/skill-management/
