@@ -4,11 +4,13 @@ Convert a Chrome bookmarks folder into an Obsidian markdown note.
 
 Usage:
     python3 chrome_bookmarks_to_note.py "Bookmarks Bar/股票-文章" \
-        "/Users/liyang/Documents/Obsidian Vault/stock/Inbox"
+        "$OBSIDIAN_VAULT/stock/Inbox"
 
     python3 chrome_bookmarks_to_note.py "股票-文章" \
-        "/Users/liyang/Documents/Obsidian Vault/stock/Inbox" \
+        "$OBSIDIAN_VAULT/stock/Inbox" \
         --category Inbox --tags 收藏夹,股票,文章
+
+    # OBSIDIAN_VAULT defaults to ~/Documents/Obsidian Vault if unset
 """
 
 from __future__ import annotations

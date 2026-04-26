@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VAULT="${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian Vault}"
+VAULT=""
+if command -v obsidian &>/dev/null; then
+	VAULT=$(obsidian vault info=path 2>/dev/null) || VAULT=""
+fi
+VAULT="${VAULT:-${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian Vault}}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ $# -lt 1 ]; then

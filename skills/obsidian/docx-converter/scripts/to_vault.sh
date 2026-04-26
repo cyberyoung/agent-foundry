@@ -62,7 +62,11 @@ if [ $# -gt 0 ] && [[ "$1" != --* ]]; then
 	shift
 fi
 
-vault_root="${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian Vault}"
+vault_root=""
+if command -v obsidian &>/dev/null; then
+	vault_root=$(obsidian vault info=path 2>/dev/null) || vault_root=""
+fi
+vault_root="${vault_root:-${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian Vault}}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 core_script="$script_dir/docx_to_obsidian.py"

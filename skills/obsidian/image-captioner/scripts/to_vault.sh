@@ -27,7 +27,11 @@ fi
 note_input="$1"
 shift
 
-vault_root="${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian Vault}"
+vault_root=""
+if command -v obsidian &>/dev/null; then
+	vault_root=$(obsidian vault info=path 2>/dev/null) || vault_root=""
+fi
+vault_root="${vault_root:-${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian Vault}}"
 if [[ "$note_input" = /* ]]; then
 	note_path="$note_input"
 else
