@@ -13,27 +13,27 @@ Images referenced in `<dir>/<note>.md` should live under `<dir>/assets/`. Images
 
 ## Usage
 
+### Single note (core script)
+
 ```bash
-# Dry run (preview only)
 python3 scripts/fix_image_paths.py <note.md> --dry-run
-
-# Execute (move files + update links)
 python3 scripts/fix_image_paths.py <note.md>
-
-# With explicit vault root
 python3 scripts/fix_image_paths.py <note.md> --vault-root /path/to/vault
 ```
 
-Local convenience wrapper (accepts vault-relative note path):
+### Single note (convenience wrapper)
 
 ```bash
 bash scripts/to_vault.sh <note-path-or-rel> [extra-args...]
+bash scripts/to_vault.sh "stock/调研笔记/2026/03/研报阅读202603-W1.md" --dry-run
+bash scripts/to_vault.sh "stock/调研笔记/2026/03/研报阅读202603-W1.md" --yes --dry-run
+```
 
-# Dry run with vault-relative note path
-bash scripts/to_vault.sh "research/weekly-review.md" --dry-run
+When no note path is given, the wrapper shows an interactive menu listing recent notes and `.md` files (recursively) from `stock/文章笔记/` and `stock/调研笔记/`:
 
-# Skip confirmation prompt
-bash scripts/to_vault.sh "research/weekly-review.md" --yes --dry-run
+```bash
+bash scripts/to_vault.sh
+bash scripts/to_vault.sh --dry-run
 ```
 
 Wrapper notes:
@@ -42,6 +42,21 @@ Wrapper notes:
 - `--vault-root` is auto-injected unless explicitly provided
 - Wrapper shows a final execution preview and asks for confirmation by default
 - Use `--yes` / `--no-confirm` to skip confirmation, `--confirm` to force it
+- Recent note selections are saved to `.to_vault_note_history`
+
+### Batch processing
+
+```bash
+bash scripts/batch_fix.sh --dry-run
+bash scripts/batch_fix.sh
+bash scripts/batch_fix.sh "stock/文章笔记"
+bash scripts/batch_fix.sh --vault-root ~/vault "research/notes" "stock/调研笔记"
+```
+
+- Recursively processes all `.md` files in the given directories (default: `stock/文章笔记`, `stock/调研笔记`)
+- Supports `--dry-run` and `--vault-root`
+- Prints per-note results and a final summary
+- Scheduled via launchd (`com.liyang.obfix.daily`) to run every day at 9:00 AM
 
 ## Features
 
@@ -53,6 +68,9 @@ Wrapper notes:
 | Alias preservation | `![[img\|alias]]` links retain their display text |
 | Dry run | `--dry-run` previews all changes without modifying anything |
 | Image formats | `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.bmp`, `.tiff` |
+| Recursive discovery | Finds notes in nested subdirectories (e.g. `2026/03/`) |
+| Interactive selection | `to_vault.sh` prompts for note when no path given |
+| Batch processing | `batch_fix.sh` recursively processes all notes in configurable directories |
 
 ## How It Works
 
@@ -69,6 +87,6 @@ Wrapper notes:
 
 ## Public Release Notes
 
-- The core public interface is `scripts/fix_image_paths.py`.
-- `scripts/to_vault.sh` is a local convenience wrapper for vault-relative note paths.
-- `scripts/weekly_stock_fix.sh` is workflow-specific and should not be treated as the primary public entrypoint.
+- Core script: `scripts/fix_image_paths.py`
+- Interactive wrapper: `scripts/to_vault.sh` (supports interactive note selection when no path given)
+- Batch script: `scripts/batch_fix.sh` (processes all notes in configurable directories, scheduled via launchd)

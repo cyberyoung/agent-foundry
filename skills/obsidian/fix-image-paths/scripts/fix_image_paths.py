@@ -83,6 +83,25 @@ def process_note(
         clean_target = embed_target.split("|")[0].strip()
         alias = embed_target.split("|")[1].strip() if "|" in embed_target else None
 
+        owned_assets_prefix = f"assets/{note_path.stem}/"
+
+        # If the embed already points to this note's own assets directory,
+        # never steal a same-named file from another note. Missing files
+        # should stay missing so batch runs remain idempotent.
+        if clean_target.startswith(owned_assets_prefix):
+            resolved = note_dir / clean_target
+            if resolved.is_file():
+                continue
+            actions.append(
+                {
+                    "embed": embed_target,
+                    "status": "NOT_FOUND",
+                    "source": None,
+                    "dest": None,
+                }
+            )
+            continue
+
         # Already under <note-dir>/assets/ → skip (any subdirectory is fine)
         try:
             resolved = note_dir / clean_target
