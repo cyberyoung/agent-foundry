@@ -36,6 +36,10 @@ Preview only:
 python3 scripts/images_to_note.py /path/to/image-dir --dry-run
 ```
 
+## Interactive Mode
+
+When invoked as a skill without arguments, the agent will prompt the user for the directory path using a dialog. This allows for interactive use without needing to specify the path upfront.
+
 ## Input / Output
 
 - Input: one directory containing image files

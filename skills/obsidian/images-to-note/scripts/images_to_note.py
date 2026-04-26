@@ -12,7 +12,7 @@ import argparse
 import re
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 SUPPORTED_EXTENSIONS = {
@@ -117,6 +117,56 @@ def collect_embed_list(
     return sorted(real_files + pending_jpgs, key=lambda p: p.name.lower())
 
 
+def extract_existing_images(note_path: Path) -> set[str]:
+    """Extract image filenames already embedded in the note.
+
+    Returns a set of filenames (case-sensitive as they appear in the note).
+    """
+    if not note_path.exists():
+        return set()
+    try:
+        text = note_path.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+
+    # Match ![[filename.ext]] format
+    pattern = r"!\[\[([^\]]+\.(?:jpg|jpeg|png|gif|webp|bmp|tiff?|heic))\]\]"
+    matches = re.findall(pattern, text, re.IGNORECASE)
+    return {Path(m).name for m in matches}
+
+
+def generate_image_title(image_path: Path) -> str:
+    """Generate a readable title from image filename.
+
+    Examples:
+        IMG_20260211_160442.jpg -> "2026-02-11 16:04:42"
+        IMG_9609.jpg -> "IMG_9609"
+    """
+    stem = image_path.stem
+
+    # Pattern: IMG_YYYYMMDD_HHMMSS
+    match = re.match(r"IMG_(\d{8})_(\d{6})", stem, re.IGNORECASE)
+    if match:
+        date_str, time_str = match.groups()
+        try:
+            dt = datetime.strptime(f"{date_str}{time_str}", "%Y%m%d%H%M%S")
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pass
+
+    # Pattern: IMG_YYYYMMDD (no time)
+    match = re.match(r"IMG_(\d{8})", stem, re.IGNORECASE)
+    if match:
+        try:
+            dt = datetime.strptime(match.group(1), "%Y%m%d")
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # Fallback: use stem as title
+    return stem
+
+
 def generate_note(
     directory: Path,
     *,
@@ -152,35 +202,65 @@ def generate_note(
         print(f"No embeddable images in {directory}")
         return
 
-    note_date = read_existing_date(note_path) or date.today().isoformat()
-    lines = [
-        "---",
-        f"title: {dir_name}",
-        f"date: {note_date}",
-        "tags:",
-        "  - paper-notes",
-        f"category: {directory.parent.name}",
-        "---",
-        "",
-        f"# {dir_name}",
-        "",
-    ]
-    for img in embed_images:
-        lines.append(f"![[{img.name}]]")
-        lines.append("")
+    # === 新增：提取已有图片 ===
+    existing_images = extract_existing_images(note_path)
 
-    content = "\n".join(lines)
+    # === 新增：计算新增图片 ===
+    new_images = [img for img in embed_images if img.name not in existing_images]
 
-    if dry_run:
-        print(f"\n[dry-run] Would {'update' if is_update else 'create'}: {note_path}")
-        print(f"[dry-run] Images: {len(embed_images)}")
-        print("--- preview ---")
-        print(content)
+    if not new_images:
+        print(f"No new images to add (all {len(embed_images)} already embedded)")
+        return
+
+    # === 区分新建 vs 追加 ===
+    if not is_update:
+        # 新建笔记：完整生成
+        note_date = date.today().isoformat()
+        lines = [
+            "---",
+            f"title: {dir_name}",
+            f"date: {note_date}",
+            "tags:",
+            "  - paper-notes",
+            f"category: {directory.parent.name}",
+            "---",
+            "",
+            f"# {dir_name}",
+            "",
+        ]
+        for img in embed_images:
+            title = generate_image_title(img)
+            lines.append(f"## {title}")
+            lines.append(f"![[{img.name}]]")
+            lines.append("")
+
+        content = "\n".join(lines)
+
+        if dry_run:
+            print(f"\n[dry-run] Would create: {note_path}")
+            print(f"[dry-run] Images: {len(embed_images)}")
+            print("--- preview ---")
+            print(content)
+        else:
+            note_path.write_text(content, encoding="utf-8")
+            print(f"\nCreated: {note_path}")
+            print(f"Images embedded: {len(embed_images)}")
     else:
-        note_path.write_text(content, encoding="utf-8")
-        action = "Updated" if is_update else "Created"
-        print(f"\n{action}: {note_path}")
-        print(f"Images embedded: {len(embed_images)}")
+        # 已存在：追加新图片
+        if dry_run:
+            print(
+                f"\n[dry-run] Would append {len(new_images)} new images to: {note_path}"
+            )
+            for img in new_images:
+                title = generate_image_title(img)
+                print(f"  - {title}: {img.name}")
+        else:
+            with note_path.open("a", encoding="utf-8") as f:
+                for img in new_images:
+                    title = generate_image_title(img)
+                    f.write(f"\n## {title}\n")
+                    f.write(f"![[{img.name}]]\n")
+            print(f"\nAppended {len(new_images)} new images to: {note_path}")
 
 
 def main() -> None:

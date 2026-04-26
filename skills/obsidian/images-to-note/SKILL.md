@@ -14,6 +14,47 @@ description: "Generate an Obsidian note from all images in a directory, sorted b
 - HEIC 文件默认通过 macOS `sips` 转换为 JPG
 - 生成带 YAML frontmatter 的 `.md` 笔记
 - 笔记文件名 = 目录名
+- **增量追加**：已有笔记只追加新图片，保留原有内容和顺序
+- 自动生成图片标题（从文件名提取时间戳或使用文件名）
+
+## 增量追加策略
+
+当笔记已存在时：
+
+1. **提取已有图片**：识别笔记中已嵌入的 `![[filename]]` 链接
+2. **计算新增图片**：对比目录图片与已有图片，筛选新增
+3. **追加到末尾**：新图片追加到文件末尾，不修改已有内容
+4. **无新图片时跳过**：提示用户所有图片已嵌入
+
+新图片追加格式：
+
+```markdown
+## 2026-02-11 16:04:42
+![[IMG_20260211_160442.jpg]]
+```
+
+标题自动提取：
+- `IMG_YYYYMMDD_HHMMSS.jpg` → `YYYY-MM-DD HH:MM:SS`
+- `IMG_YYYYMMDD.jpg` → `YYYY-MM-DD`
+- 其他文件名 → 使用文件名 stem
+
+## Agent 工作流
+
+当用户调用此 skill 但未提供目录路径参数时：
+
+1. **使用 `question` 工具弹窗提示用户输入目录路径**
+2. 提示信息示例："请输入需要处理的图片目录路径（支持 vault 相对路径或绝对路径）"
+3. 获取用户输入后，继续执行脚本
+
+示例交互：
+```
+用户: /ob-images-to-note
+AI: [使用 question 工具弹窗]
+用户输入: research/photos/my-photos
+AI: 执行脚本处理该目录
+```
+
+当用户已提供目录路径时，直接执行脚本，无需弹窗。
 
 ## 脚本路径
 
@@ -62,7 +103,28 @@ bash scripts/to_vault.sh "research/photos/report-images" --keep-heic
 
 - 文件名：`<目录名>.md`
 - Frontmatter 字段：`title`、`date`、`tags`、`category`
-- 正文：每张图片一行 `![[filename]]`
+- 新建笔记：每张图片包含 H2 标题 + 嵌入链接
+- 追加图片：在文件末尾追加 H2 标题 + 嵌入链接
+
+示例：
+
+```markdown
+---
+title: 研报
+date: 2026-03-09
+tags:
+  - paper-notes
+category: 纸质笔记
+---
+
+# 研报
+
+## 2026-02-11 16:04:42
+![[IMG_20260211_160442.jpg]]
+
+## IMG_9609
+![[IMG_9609.jpg]]
+```
 
 ## HEIC 处理策略
 
