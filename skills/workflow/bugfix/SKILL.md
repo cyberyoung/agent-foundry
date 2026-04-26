@@ -9,6 +9,15 @@ description: Use when fixing a bug — any size, any number of files. Enforces t
 
 Enforce disciplined bug fixing: failing test → minimal fix → prevention assessment. **No code fix without a failing test first.**
 
+**Workflow mode:** `mode = bugfix`
+
+This skill is the authoritative entry point for bugfix mode. Bugfix mode always requires:
+
+- failing-test-first evidence
+- a defined **target test file**
+- a defined **target test command**
+- a successful `pnpm check:task --mode bugfix` before claiming completion
+
 ## When to Use
 
 - Any bug report or broken behavior
@@ -26,10 +35,11 @@ Branch ──▶ Reproduce ──gate──▶ Plan Review ──gate──▶ F
 
 Never fix directly on main — no exceptions, no matter how small.
 
-1. Check current state:
+1. Check current state and sync main:
 
 ```bash
 git branch --show-current && git status --short
+git fetch origin main && git merge origin/main --ff-only
 ```
 
 2. Decide:
@@ -37,7 +47,16 @@ git branch --show-current && git status --short
    - **On main** → create a fix branch: `git checkout -b fix/<bug-name>`
    - **On any other branch** → switch to main first, then create a fix branch: `git checkout main && git checkout -b fix/<bug-name>`
 
-**Gate: You must NOT be on main before any code changes.**
+3. Check for worktree environment:
+
+```bash
+git worktree list
+```
+
+   - **Single entry (main repo only)** → no directory verification needed
+   - **Current directory is a worktree** → all file paths in this session MUST be under the current working directory. Do NOT trust paths returned by agents, cached from earlier in the conversation, or recalled from memory — always reconstruct from `pwd`
+
+**Gate: You must NOT be on main before any code changes. If in a worktree, verify all paths are local.**
 
 ## Phase 0.5: PRD Check
 
@@ -92,6 +111,11 @@ Write a test that:
 - **Fails** with the current code
 - Will **pass** once the fix is applied
 
+Before writing or running the test, explicitly record:
+
+- **target test file**
+- **target test command**
+
 Run the test and confirm it fails:
 
 ```bash
@@ -118,6 +142,7 @@ pnpm vitest run <test-file>
 ```
 
 3. Do NOT add features, refactor surrounding code, or update rules at this stage
+4. **不提交** — 积累变更，等 Phase 4 完成后由用户审批再统一提交
 
 **Gate: The previously failing test must now pass. If it doesn't, keep fixing.**
 
@@ -134,6 +159,13 @@ Evaluate whether the bug pattern needs systemic prevention:
 
 **Document your conclusion** — even if the answer is "no new rule needed, existing coverage is sufficient."
 
+Before any completion claim, run and pass:
+
+```bash
+pnpm check:task --mode bugfix
+node scripts/check-task-gate.mjs --gate completion --mode bugfix
+```
+
 **Important: Only update rules/conventions AFTER the fix is verified by tests. Never update rules based on an unverified fix.**
 
 ## Red Flags — STOP Immediately
@@ -148,3 +180,4 @@ Evaluate whether the bug pattern needs systemic prevention:
 | "I should add a rule to prevent this" | Only after the fix is verified. Rules based on unverified fixes are premature. |
 | "The fix works in my head, no need to run the test" | Run the test. Always. |
 | "It's a one-liner, I'll fix it on main" | Not on main. Switch to or create a branch first. |
+| "The agent found the file at /path/to/main-repo/..." | If in a worktree, that path is wrong. Reconstruct from pwd. |

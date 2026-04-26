@@ -11,6 +11,20 @@ Enforce plan-first → gate → move → worktree isolation for multi-file featu
 
 **Core principle:** No `git worktree add` without a reviewed plan on main.
 
+## Feature Mode
+
+This workflow must explicitly declare a **feature mode** before implementation begins:
+
+- `tdd-feature`
+- `standard-feature`
+
+Default fallback is `standard-feature`. Do **not** infer mode from branch name, commit message, or vague wording.
+
+Mode semantics must stay aligned with `wf-branch-workflow`:
+
+- `tdd-feature` → requires failing-test-first evidence and stronger completion proof
+- `standard-feature` → does not require failing-test-first, but still requires a successful `pnpm check:task`
+
 ## When to Use
 
 - Multi-file feature needing a plan or design doc
@@ -35,9 +49,12 @@ Run this BEFORE anything else — even before exploring the codebase:
 
 ```bash
 git branch --show-current && git status --short && git worktree list
+git fetch origin main && git merge origin/main --ff-only
 ```
 
 **Do NOT assume you know the current branch or worktree.** Other sessions or the user may have switched branches since your last turn. Verify, then proceed.
+
+**Do NOT skip the fetch.** Creating a worktree from a stale main is the #1 cause of avoidable merge conflicts.
 
 ### Phase 0.9: Interface Dependency Verification (MANDATORY before Plan)
 
@@ -86,6 +103,7 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 - File `docs/designs/{name}.md` exists
 - Contains: problem statement, approach, affected files, API summary
 - Contains: "Interface Dependencies" section, all APIs marked `[CONFIRMED]`
+- Contains: test design section (`## 测试` or `## Test`) — 每个变更块的测试用例和验证点
 
 **Then:** Update `docs/README.md` index. **STOP. Present design to user. Wait for approval.**
 
@@ -103,6 +121,7 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 **Post-completion verification:**
 - File `docs/plans/{name}.md` exists
 - Contains: branch name, base branch + commit hash, worktree path, commit strategy, merge method
+- Contains: explicit **feature mode** (`tdd-feature` or `standard-feature`)
 
 **Then:** Update `docs/README.md` index. **STOP. Present plan to user. Wait for approval.**
 
@@ -115,13 +134,36 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 
 ### Phase 3: Build (worktree only)
 
+#### Working Directory Verification (MANDATORY before every file operation)
+
+Before any Read/Edit/Write/Bash file operation, verify the path belongs to the current environment:
+
+1. **Determine environment**: Am I in a worktree or the main repo? Check `git worktree list` or the session's primary working directory.
+2. **Validate path**: Does the target file path fall under the current worktree/repo directory?
+3. **Reject cross-environment paths**: If a path points to the main repo while working in a worktree (or vice versa), STOP — rewrite the path for the current environment.
+4. **Distrust cached paths**: Absolute paths from earlier in the conversation or from memory may point to the wrong environment. Always reconstruct from the current working directory.
+
+**Hard rule**: The session's primary working directory (shown in gitStatus at conversation start) is the source of truth. All file paths must be under that directory.
+
 **Provider dispatch:** Look up `execute` phase provider (same lookup as Phase 1).
 
-**If provider is a skill name:** Invoke that skill, instruct it to execute `docs/plans/{name}.md`. After completion, run CI check.
+**If provider is a skill name:** Invoke that skill, instruct it to execute `docs/plans/{name}.md`. **传达以下约束：**
+- **禁止逐 task 提交** — implementer 不执行 `git commit`，计划中的 "commit" 步骤替换为 "验证"（`pnpm vitest run --changed`）
+- **所有变更积累** — 直到整体 review 通过、用户审批后统一提交
+- 提交粒度 = 完整功能，不是子任务
+
+After completion, run CI check.
 
 **If manual:**
 8. All edits in worktree — never touch main
 9. Install deps, verify clean baseline
+10. **不逐 task 提交** — 积累变更到 Phase 4（Ship）
+
+Before any completion claim, the task must pass:
+
+```bash
+pnpm check:task
+```
 
 #### Subagent Verification Protocol (MANDATORY when delegating)
 
@@ -160,6 +202,12 @@ If the changeset includes new or modified routes (`src/routes/`) or page operati
 
 **Provider dispatch:** Look up `ship` phase provider (same lookup as Phase 1).
 
+Before entering ship / publish / PR flow, run and pass:
+
+```bash
+node scripts/check-task-gate.mjs --gate pre-pr
+```
+
 **If provider is a skill name:** Invoke that skill to complete the development branch.
 
 **If manual:** Show summary of changes to user. Do NOT push or create PR without explicit request.
@@ -178,6 +226,7 @@ If the changeset includes new or modified routes (`src/routes/`) or page operati
 | "I already know what to do, skip planning"      | Plans catch gaps you don't see. Write it.                          |
 | "The API should exist, user mentioned the path" | Mentioned ≠ documented. Verify or ask. Never assume.               |
 | "The interface is probably similar to others"   | Every interface must be independently verified.                    |
+| "I'll use the path from earlier in the conversation" | Earlier path may point to main repo, not the current worktree. Reconstruct from pwd. |
 
 ## AGENTS.md Setup
 
