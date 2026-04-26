@@ -569,6 +569,201 @@ def command_update(args: argparse.Namespace) -> None:
     print(f"Updated {len(targets)} skill(s)")
 
 
+SKILLS_MANAGER_DB = Path.home() / ".skills-manager" / "skills-manager.db"
+STATE_PATH = SKILL_BASE_DIR / "upstream-state.json"
+SCHEDULER_CONFIG_PATH = SKILL_BASE_DIR / "scheduler-config.json"
+LAUNCH_AGENTS_DIR = Path.home() / "Library" / "LaunchAgents"
+
+
+def _self_authored_names() -> set[str]:
+    names: set[str] = set()
+    for entry in SKILLS_ROOT.iterdir():
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        if (entry / ".prefix").exists():
+            prefix = (entry / ".prefix").read_text(encoding="utf-8").strip()
+            for child in entry.iterdir():
+                if child.is_dir() and (child / "SKILL.md").exists():
+                    names.add(f"{prefix}-{child.name}")
+        elif (entry / "SKILL.md").exists():
+            registry = load_registry()
+            if entry.name not in registry:
+                names.add(entry.name)
+    return names
+
+
+def command_import_from_sm(args: argparse.Namespace) -> None:
+    from import_skills_manager import run_import
+
+    db_path = Path(str(args.db)) if args.db else SKILLS_MANAGER_DB
+    existing_registry = load_registry()
+    self_authored = _self_authored_names()
+
+    allowlist: set[str] | None = None
+    denylist: set[str] | None = None
+    if args.allowlist:
+        allowlist = {s.strip() for s in str(args.allowlist).split(",")}
+    if args.denylist:
+        denylist = {s.strip() for s in str(args.denylist).split(",")}
+
+    result = run_import(
+        db_path=db_path,
+        registry_path=REGISTRY_PATH,
+        state_path=STATE_PATH,
+        self_authored_names=self_authored,
+        existing_registry=existing_registry,
+        dry_run=bool(args.dry_run),
+        allowlist=allowlist,
+        denylist=denylist,
+    )
+
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        s = result["summary"]
+        mode = "[dry-run] " if args.dry_run else ""
+        print(
+            f"{mode}Import: {s['total_read']} read, {s['created']} created, "
+            f"{s['adopted']} adopted, {s['conflicts']} conflicts, {s['rejected']} rejected"
+        )
+        if result.get("conflicts"):
+            print(f"  Conflicts: {', '.join(result['conflicts'])}")
+        if result.get("rejected"):
+            print(f"  Rejected (self-authored): {', '.join(result['rejected'])}")
+        if bool(args.fail_on_conflict) and s["conflicts"] > 0:
+            raise SystemExit(1)
+
+
+def command_check_updates(args: argparse.Namespace) -> None:
+    from upstream_state import load_state, save_state, check_revisions_grouped
+
+    registry = load_registry()
+    if not registry:
+        print("No upstream skills in registry")
+        return
+
+    state = load_state(STATE_PATH)
+    updated_state = check_revisions_grouped(registry, state)
+
+    if not bool(args.dry_run):
+        save_state(STATE_PATH, updated_state)
+
+    outdated = [
+        name
+        for name, entry in updated_state.items()
+        if entry.get("update_status") == "outdated"
+    ]
+    up_to_date = [
+        name
+        for name, entry in updated_state.items()
+        if entry.get("update_status") == "up_to_date"
+    ]
+    unknown = [
+        name
+        for name, entry in updated_state.items()
+        if entry.get("update_status") == "unknown"
+    ]
+
+    if args.json:
+        print(json.dumps(updated_state, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        mode = "[dry-run] " if args.dry_run else ""
+        print(
+            f"{mode}Check: {len(up_to_date)} up-to-date, "
+            f"{len(outdated)} outdated, {len(unknown)} unknown"
+        )
+        if outdated:
+            print(f"  Outdated: {', '.join(sorted(outdated))}")
+
+
+def command_migrate_registry(args: argparse.Namespace) -> None:
+    from upstream_registry import migrate_registry_schema
+
+    registry = load_registry()
+    if not registry:
+        print("Registry is empty, nothing to migrate")
+        return
+
+    first_entry = next(iter(registry.values()))
+    if first_entry.get("schema_version") == "2":
+        print("Registry already at v2 schema")
+        return
+
+    migrated = migrate_registry_schema(registry)
+
+    if bool(args.dry_run):
+        print(json.dumps(migrated, ensure_ascii=False, indent=2, sort_keys=True))
+        return
+
+    backup_path = str(REGISTRY_PATH) + ".v1-backup"
+    shutil.copy2(str(REGISTRY_PATH), backup_path)
+    save_registry(migrated)
+    print(f"Migrated {len(migrated)} entries to v2 schema")
+    print(f"Backup: {backup_path}")
+
+
+def command_snapshot(args: argparse.Namespace) -> None:
+    from runtime_snapshot import snapshot_runtime_links
+
+    registry = load_registry()
+    if not registry:
+        print("No upstream skills in registry")
+        return
+
+    import sys as _sys
+
+    _sync_scripts = str(NAMESPACE_ROOT / "sync-skills" / "scripts")
+    if _sync_scripts not in _sys.path:
+        _sys.path.insert(0, _sync_scripts)
+    from sync_config import load_sync_config, BUILTIN_TARGETS
+
+    sync_config_path = NAMESPACE_ROOT / "sync-skills" / "sync-config.json"
+    if sync_config_path.exists():
+        config = load_sync_config(sync_config_path)
+        raw_targets: dict[str, str] = config.get("targets", BUILTIN_TARGETS)  # type: ignore[assignment]
+    else:
+        raw_targets = dict(BUILTIN_TARGETS)
+
+    targets = {name: Path(path).expanduser() for name, path in raw_targets.items()}
+
+    snapshot = snapshot_runtime_links(
+        targets=targets,
+        skill_names=sorted(registry.keys()),
+    )
+
+    snapshot_dir = SKILL_BASE_DIR / ".snapshots"
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    snapshot_path = snapshot_dir / f"snapshot-{ts}.json"
+    snapshot_path.write_text(
+        json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Snapshot saved: {snapshot_path}")
+    entries = snapshot.get("targets", {})
+    print(f"  Links recorded: {len(entries)}")
+
+
+def command_restore(args: argparse.Namespace) -> None:
+    from runtime_snapshot import restore_runtime_links
+
+    snapshot_path = Path(str(args.snapshot))
+    if not snapshot_path.exists():
+        print(f"Snapshot file not found: {snapshot_path}")
+        raise SystemExit(1)
+
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+    if bool(args.dry_run):
+        entries = snapshot.get("targets", {})
+        print(f"[dry-run] Would restore {len(entries)} links from {snapshot_path}")
+        return
+
+    result = restore_runtime_links(snapshot=snapshot)
+    restored = result.get("restored", [])
+    print(f"Restored {len(restored)} links from {snapshot_path}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Unified local/upstream skill manager")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -633,6 +828,65 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = parser_verify.add_argument("--json", action="store_true", help="Output JSON")
     parser_verify.set_defaults(func=command_verify)
+
+    parser_import = subparsers.add_parser(
+        "import-from-skills-manager",
+        help="Import upstream metadata from skills-manager DB",
+    )
+    _ = parser_import.add_argument("--db", help="Path to skills-manager.db")
+    _ = parser_import.add_argument(
+        "--dry-run", action="store_true", help="Preview without writing files"
+    )
+    _ = parser_import.add_argument("--json", action="store_true", help="Output JSON")
+    _ = parser_import.add_argument(
+        "--fail-on-conflict",
+        action="store_true",
+        help="Exit non-zero if any conflicts found",
+    )
+    _ = parser_import.add_argument(
+        "--allowlist", help="Comma-separated skill names to include"
+    )
+    _ = parser_import.add_argument(
+        "--denylist", help="Comma-separated skill names to exclude"
+    )
+    parser_import.set_defaults(func=command_import_from_sm)
+
+    parser_check = subparsers.add_parser(
+        "check-updates",
+        help="Check remote revisions for upstream skills",
+    )
+    _ = parser_check.add_argument(
+        "--dry-run", action="store_true", help="Check without saving state"
+    )
+    _ = parser_check.add_argument("--json", action="store_true", help="Output JSON")
+    parser_check.set_defaults(func=command_check_updates)
+
+    parser_migrate_reg = subparsers.add_parser(
+        "migrate-registry-schema",
+        help="Upgrade registry from v1 to v2 schema",
+    )
+    _ = parser_migrate_reg.add_argument(
+        "--dry-run", action="store_true", help="Preview migration output"
+    )
+    parser_migrate_reg.set_defaults(func=command_migrate_registry)
+
+    parser_snapshot = subparsers.add_parser(
+        "snapshot-runtime-links",
+        help="Record current upstream symlink state before takeover",
+    )
+    parser_snapshot.set_defaults(func=command_snapshot)
+
+    parser_restore = subparsers.add_parser(
+        "restore-runtime-links",
+        help="Restore symlinks from a snapshot file",
+    )
+    _ = parser_restore.add_argument(
+        "--snapshot", required=True, help="Path to snapshot JSON file"
+    )
+    _ = parser_restore.add_argument(
+        "--dry-run", action="store_true", help="Preview without restoring"
+    )
+    parser_restore.set_defaults(func=command_restore)
 
     return parser
 
