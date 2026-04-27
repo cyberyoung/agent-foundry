@@ -94,7 +94,17 @@ Bots often guess behavior based on other modules. Always verify against API docs
 mcp__VShield_API_____read_project_oas_ref_resources
 ```
 
-### 3c. Determine verdict
+### 3c. Compare reviewer's solution against your own (MANDATORY)
+
+When a review comment proposes a concrete alternative implementation (e.g., "use `Get-NetTCPConnection` instead of `findstr`"), and you decide on a different fix, you MUST:
+
+1. List both approaches in the decision table with pros/cons
+2. Justify why your approach is better with concrete evidence — **OR** adopt the reviewer's approach
+3. Never silently dismiss the reviewer's suggestion in favor of your own
+
+If unsure which approach is better, present both to the user and let them decide.
+
+### 3d. Determine verdict
 
 | Verdict | Action |
 |---------|--------|
@@ -211,3 +221,4 @@ PR #{number} review triage complete:
 | Treat all comments as in-scope | Only fix issues introduced by this PR's changes |
 | Write long explanations | Keep replies to 1-2 lines with evidence |
 | Execute fixes/resolves without user approval | Always output decision table and wait for confirmation |
+| Propose own fix without comparing to reviewer's suggestion | When reviewer proposes concrete solution, explicitly list both approaches with pros/cons in decision table |
