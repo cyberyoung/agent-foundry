@@ -71,6 +71,181 @@ get_pr_info() {
   gh pr list --head "$branch" --state merged --json number,title --jq '.[0] | "#\(.number) \(.title)"' 2>/dev/null || echo ""
 }
 
+# Merge .claude/settings.local.json from worktree back to main repo before deletion.
+# (settings.json is in git — all worktrees share the same version.)
+# Otherwise per-worktree permission grants etc. are lost.
+merge_claude_settings() {
+  local worktree_path="$1"
+  local main_path="$2"
+
+  # 检查 jq 可用性
+  command -v jq >/dev/null 2>&1 || { warn "jq 不可用，跳过 .claude 配置合并"; return 0; }
+
+  for fname in settings.local.json; do
+    local wt_file="$worktree_path/.claude/$fname"
+    local main_file="$main_path/.claude/$fname"
+
+    [ -f "$wt_file" ] || continue
+
+    # 主仓库无此文件 → 直接复制
+    if [ ! -f "$main_file" ]; then
+      mkdir -p "$main_path/.claude"
+      cp "$wt_file" "$main_file"
+      pass "复制 .claude/$fname → 主仓库（主仓库原本无此文件）"
+      continue
+    fi
+
+    # 内容一致 → 跳过
+    if cmp -s "$wt_file" "$main_file"; then
+      continue
+    fi
+
+    # 合并：以 main 为基础，worktree 的字段覆盖；permissions.allow / .deny 数组联合去重
+    local merged
+    merged="$(mktemp)"
+    if jq -s '
+      (.[0] // {}) as $main |
+      (.[1] // {}) as $wt |
+      ($main * $wt) as $combined |
+      $combined
+      | (if ($main.permissions.allow // []) + ($wt.permissions.allow // []) | length > 0 then
+          .permissions.allow = ((($main.permissions.allow // []) + ($wt.permissions.allow // [])) | unique)
+         else . end)
+      | (if ($main.permissions.deny // []) + ($wt.permissions.deny // []) | length > 0 then
+          .permissions.deny = ((($main.permissions.deny // []) + ($wt.permissions.deny // [])) | unique)
+         else . end)
+    ' "$main_file" "$wt_file" > "$merged" 2>/dev/null && [ -s "$merged" ]; then
+      mv "$merged" "$main_file"
+      pass "合并 .claude/$fname → 主仓库（permissions 数组已去重）"
+    else
+      rm -f "$merged"
+      warn "合并 .claude/$fname 失败（jq 错误），请手动检查 $wt_file"
+      return 1
+    fi
+  done
+
+  return 0
+}
+
+# Merge opencode.json from worktree back to main repo before deletion.
+# Handles mcp (object merge, wt overrides) and plugin (array join + dedupe).
+# .opencode/ directory is NOT merged — it stays under version control via git.
+merge_opencode_settings() {
+  local worktree_path="$1"
+  local main_path="$2"
+
+  command -v jq >/dev/null 2>&1 || { warn "jq 不可用，跳过 opencode.json 合并"; return 0; }
+
+  local wt_file="$worktree_path/opencode.json"
+  local main_file="$main_path/opencode.json"
+
+  [ -f "$wt_file" ] || return 0
+
+  if [ ! -f "$main_file" ]; then
+    cp "$wt_file" "$main_file"
+    pass "复制 opencode.json → 主仓库（主仓库原本无此文件）"
+    return 0
+  fi
+
+  if cmp -s "$wt_file" "$main_file"; then
+    return 0
+  fi
+
+  local merged
+  merged="$(mktemp)"
+  if jq -s '
+    (.[0] // {}) as $main |
+    (.[1] // {}) as $wt |
+    ($main * $wt) as $combined |
+    $combined
+    | .mcp  = ((($main.mcp  // {}) * ($wt.mcp  // {})) // if ($wt.mcp)  then $wt.mcp  else $main.mcp  end)
+    | .plugin = (if (($main.plugin // []) + ($wt.plugin // [])) | length > 0 then
+                  ((($main.plugin // []) + ($wt.plugin // [])) | unique)
+                else .plugin end)
+    | del(."$schema")
+  ' "$main_file" "$wt_file" > "$merged" 2>/dev/null && [ -s "$merged" ]; then
+    jq '. + {"$schema": "https://opencode.ai/config.json"}' "$merged" > "${merged}.tmp"
+    mv "${merged}.tmp" "$main_file"
+    rm -f "$merged"
+    pass "合并 opencode.json → 主仓库（mcp 按 server 合并，plugin 已去重）"
+  else
+    rm -f "$merged"
+    warn "合并 opencode.json 失败（jq 错误），请手动检查 $wt_file"
+    return 1
+  fi
+
+  return 0
+}
+
+# Check worktree for uncommitted / unpushed / dirty state before cleanup.
+# Returns 0 if clean, 1 if anything needs handling.
+check_worktree_clean() {
+  local wt_path="$1"
+  local dirty=0
+
+  # 1. Detached HEAD — can't determine branch
+  if ! git -C "$wt_path" symbolic-ref -q HEAD >/dev/null 2>&1; then
+    fail "detached HEAD — 请先切到分支: git checkout -b <name> 或 git switch main"
+    dirty=1
+  fi
+
+  # 2. Ongoing rebase / merge / cherry-pick
+  if [ -d "$wt_path/.git/rebase-merge" ] || [ -f "$wt_path/.git/MERGE_HEAD" ] || [ -f "$wt_path/.git/CHERRY_PICK_HEAD" ]; then
+    fail "正在进行 rebase/merge/cherry-pick — 请先完成或 abort"
+    dirty=1
+  fi
+
+  # 3. Unstaged changes
+  local unstaged
+  unstaged=$(git -C "$wt_path" diff --name-only 2>/dev/null)
+  if [ -n "$unstaged" ]; then
+    fail "有未暂存的修改:"
+    while IFS= read -r f; do
+      echo "    $f"
+    done <<< "$unstaged"
+    echo "    → 处理: git stash 或 git add + git commit"
+    dirty=1
+  fi
+
+  # 4. Staged but uncommitted
+  local staged
+  staged=$(git -C "$wt_path" diff --cached --name-only 2>/dev/null)
+  if [ -n "$staged" ]; then
+    fail "有已暂存但未提交的文件:"
+    while IFS= read -r f; do
+      echo "    $f"
+    done <<< "$staged"
+    echo "    → 处理: git commit"
+    dirty=1
+  fi
+
+  # 5. Untracked files
+  local untracked
+  untracked=$(git -C "$wt_path" ls-files --others --exclude-standard 2>/dev/null)
+  if [ -n "$untracked" ]; then
+    fail "有未追踪的文件:"
+    while IFS= read -r f; do
+      echo "    $f"
+    done <<< "$untracked"
+    echo "    → 处理: git add 或删除"
+    dirty=1
+  fi
+
+  # 6. Unpushed commits
+  local unpushed
+  unpushed=$(git -C "$wt_path" log @{u}..HEAD --oneline 2>/dev/null)
+  if [ -n "$unpushed" ]; then
+    fail "有未推送的提交:"
+    while IFS= read -r line; do
+      echo "    $line"
+    done <<< "$unpushed"
+    echo "    → 处理: git push"
+    dirty=1
+  fi
+
+  [ "$dirty" -eq 0 ] && return 0 || return 1
+}
+
 # Clean up a single worktree
 cleanup_one() {
   local path="$1"
@@ -102,9 +277,28 @@ cleanup_one() {
   esac
 
   if [ "$dry_run" = "true" ]; then
-    info "[dry-run] Would remove worktree, local branch, and remote branch"
+    info "[dry-run] Would check worktree cleanliness, merge .claude settings, remove worktree, local branch, and remote branch"
     return 0
   fi
+
+  # Step 1.5: Check worktree is clean (no uncommitted / unpushed work)
+  check_worktree_clean "$path" || {
+    fail "Worktree 有未处理的工作 — 请先处理上述问题再清理"
+    return 1
+  }
+
+  # Step 1.6: Merge .claude/settings.local.json back to main repo
+  local main_repo
+  main_repo="$(main_worktree)"
+  merge_claude_settings "$path" "$main_repo" || {
+    fail "合并 settings.local.json 失败 — 中止清理（不删除 worktree）"
+    return 1
+  }
+
+  merge_opencode_settings "$path" "$main_repo" || {
+    fail "合并 opencode.json 失败 — 中止清理（不删除 worktree）"
+    return 1
+  }
 
   # Step 2: Remove worktree
   if git worktree remove "$path" 2>/dev/null; then
@@ -142,6 +336,8 @@ cleanup_one() {
 }
 
 # --- Main ---
+# Only execute main when run directly, not when sourced (for test reuse)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
 [ $# -eq 0 ] && usage
 
@@ -197,3 +393,5 @@ else
     exit 1
   fi
 fi
+
+fi  # [[ "${BASH_SOURCE[0]}" == "${0}" ]] guard
