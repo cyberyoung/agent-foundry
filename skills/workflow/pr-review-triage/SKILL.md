@@ -9,7 +9,11 @@ description: Use when handling PR review comments — triaging, verifying, fixin
 
 Systematically process all review comments on a PR: classify, verify against code and API docs, fix real bugs, dismiss false positives with evidence, and resolve all threads.
 
-**Core principle:** Bot suggestions are hypotheses, not facts. Every finding must be verified against source code and API documentation before acting.
+**Core principles:**
+
+1. Bot suggestions are hypotheses, not facts. Every finding must be verified against source code and API documentation before acting.
+2. **Judge by first principles, not by scope.** "Is this a bug?" is the only question. "Was this introduced in this PR?" is irrelevant — bot reviews mark code in the PR diff. "Not in this PR" must NEVER appear as a reason to skip or dismiss a finding. If code has a bug, fix it. Period.
+3. The ONLY valid reasons to skip a finding: (a) genuine false positive — bot misread the code, (b) architectural refactor needed, create a TODO. Nothing else.
 
 ## When to Use
 
@@ -30,7 +34,7 @@ Fetch ──▶ Classify ──▶ Verify ──▶ Decision table ──▶ Wai
 ## Phase 1: Fetch & Inventory
 
 ```bash
-# Get all review comments
+# Get all inline review comments (threads)
 gh api repos/{owner}/{repo}/pulls/{number}/comments \
   --jq '.[] | {id, path, line, body: (.body | split("\n")[0:3] | join(" ")), user: .user.login}'
 
@@ -51,17 +55,22 @@ query {
     }
   }
 }' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | {threadId: .id, commentId: .comments.nodes[0].databaseId, path: .comments.nodes[0].path}'
+
+# CRITICAL: Also fetch review bodies — codex-connector bot often puts findings in
+# the review body (not as inline threads). These have no thread to resolve.
+gh api repos/{owner}/{repo}/pulls/{number}/reviews \
+  --jq '.[] | select(.body | length > 100) | {id, user: .user.login, submitted_at, body_preview: (.body[0:300])}'
 ```
 
 Group by source: `gemini-code-assist[bot]`, `chatgpt-codex-connector[bot]`, human reviewers.
 
+**For review body findings:** extract the file path, line range, and summary from the body (codex uses `{url}#L14-L17` pattern). There is no thread — reply by submitting a PR review (`gh api repos/.../reviews -f body="..." -f event=COMMENT`).
+
 ## Phase 2: Classify
 
-For each comment, determine two things:
+For each comment, determine:
 
-**A. Is it within scope of this PR's changes?**
-
-Compare comment file path against the files changed in the current feature. Use `git diff --name-only <base>...HEAD` or check the PR diff.
+**A. Is it a real issue?** Verify against code — does the code actually have this bug?
 
 **B. Severity**
 
@@ -108,13 +117,11 @@ If unsure which approach is better, present both to the user and let them decide
 
 | Verdict | Action |
 |---------|--------|
-| Real bug, in scope | Fix, reply (✅ commit hash + description), resolve |
-| Real bug, out of scope | Reply (⏭️ out of scope + reason), resolve |
+| Real bug | Fix, reply (✅ commit hash + description), resolve |
 | False positive | Reply (ℹ️ cite code/API docs as evidence), resolve |
 | Already fixed | Reply (✅ confirm fix + commit hash), resolve |
 | Deferred (TODO) | Reply (📋 TODO # + reason), resolve |
-| Style, introduced by this PR | Fix, reply (✅ fixed), resolve |
-| Style, pre-existing | Reply (⏭️ pre-existing + brief reason), resolve |
+| Style issue | Fix, reply (✅ fixed), resolve |
 
 ### Reply format
 
@@ -130,13 +137,7 @@ Every resolve MUST be preceded by a reply explaining the verdict. This gives rev
 > ✅ Already fixed in `{hash}`. Current code: {specific state}.
 
 **Deferred (TODO):**
-> 📋 Recorded as TODO #{N} — {reason for deferral}. (e.g., "edge case, low impact", "needs architecture change")
-
-**Out of scope:**
-> ⏭️ Out of scope for this PR — {brief reason}. (e.g., "pre-existing pattern", "affects 264 files, separate PR")
-
-**Style / Doc:**
-> ⏭️ Doc/style issue — {brief reason}. (e.g., "design doc, implementation is correct", "plan already executed")
+> 📋 Recorded as TODO #{N} — {reason for deferral}. (e.g., "needs architecture change")
 
 ## Phase 3.5: Confirmation Gate (MANDATORY)
 
@@ -218,7 +219,9 @@ PR #{number} review triage complete:
 | Leave unhandled comments unresolved | Resolve them; new comments will appear on next review |
 | Reply "known issue" without evidence | Reply with specific evidence (code line, commit hash, TODO #) |
 | Resolve without replying | Always reply before resolving — provides audit trail for reviewers |
-| Treat all comments as in-scope | Only fix issues introduced by this PR's changes |
 | Write long explanations | Keep replies to 1-2 lines with evidence |
 | Execute fixes/resolves without user approval | Always output decision table and wait for confirmation |
 | Propose own fix without comparing to reviewer's suggestion | When reviewer proposes concrete solution, explicitly list both approaches with pros/cons in decision table |
+| Classify bot findings as "pre-existing" or "out of scope" | Bot comments are on PR diff code. Judge by first principles: is it a bug? |
+| Skip obvious bugs because "not in this PR" | "Is it a bug?" is the ONLY question. If yes, fix it. No other excuse. |
+| Judge by "was this introduced here?" | Judge by "is the code correct or not?" — first principles over scope concerns |
