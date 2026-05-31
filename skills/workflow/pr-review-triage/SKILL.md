@@ -482,6 +482,10 @@ Write fix before test? DELETE IT. Start over.
 Write a test that reproduces the exact bug identified in the review finding.
 
 - The test MUST target the specific issue: wrong behavior, missing edge case, type violation, etc.
+- If the approved fix includes a behavior-preserving implementation change,
+  also apply `wf-bugfix`'s old-green/new-green characterization rule. Do not
+  duplicate that rule here; `wf-bugfix` is the source of truth for this
+  evidence standard.
 - For UI findings whose bug exists at the user boundary, follow
   `wf-ui-browser-verification` for Browser RED/GREEN evidence. Do not duplicate
   that skill's browser-evidence rules here.

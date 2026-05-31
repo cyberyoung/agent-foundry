@@ -318,6 +318,28 @@ Stop. The bug is not proven.
 3. Do not write production code unless you can produce a failing test or the
    user explicitly approves a different evidence standard.
 
+### Behavior-preserving changes need old-green/new-green evidence
+
+Some approved fixes include a behavior-preserving implementation change: the
+intended user or business behavior stays the same, but code is rewritten,
+logic is moved, rendering is replaced with an equivalent helper, parameters are
+assembled differently, or a shared utility is reused.
+
+For this class of change, a test that only passes on the new implementation is
+not enough. Add the smallest characterization test for the behavior that must
+stay unchanged, then run the same test in both states:
+
+1. **Old GREEN** — apply only the new characterization test to the pre-change
+   baseline, usually in a temporary worktree at the commit before the rewrite,
+   and confirm it passes against the old implementation.
+2. **New GREEN** — run the same test on the current implementation after the
+   rewrite and confirm it still passes.
+
+This evidence complements, but does not replace, the bugfix RED/GREEN proof.
+If the old implementation fails the characterization test, the change is not
+behavior-preserving; reclassify it as a behavior change or a newly discovered
+bug and get approval for that scope.
+
 ## Phase 3: Fix
 
 1. Implement the minimal fix — change only what's needed to make the failing test pass
