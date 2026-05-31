@@ -25,6 +25,52 @@ Mode semantics must stay aligned with `wf-branch-workflow`:
 - `tdd-feature` → requires failing-test-first evidence and stronger completion proof
 - `standard-feature` → does not require failing-test-first, but still requires a successful `pnpm check:task`
 
+## OpenSpec Lifecycle
+
+Feature work that adds a capability, changes behavior, changes architecture, or changes
+security / performance semantics must create or reference an OpenSpec change.
+
+If an OpenSpec change exists for the task:
+
+- Plan must declare `OpenSpec Change: <change-id>`.
+- Plan must include `## OpenSpec Traceability`.
+- Every OpenSpec `#### Scenario:` must map to a task and verification/test.
+- Implementation must read `proposal.md`, `design.md`, and `specs/**/spec.md`.
+- Implementation must run `openspec validate <change-id> --strict` before coding.
+- Final review must check every OpenSpec scenario for implementation and test coverage.
+- Completion must archive the change after merge/release or record a deferred-archive reason.
+
+`pnpm check:task --mode <mode>` must include `pnpm check:openspec-traceability`.
+
+## Frontend Interaction Gate
+
+When the task adds or changes modal, drawer, side panel, long-running button,
+mutation-driven UI, SSE-driven UI, polling-driven UI, or generated-content UI:
+
+- The design/plan must include `## UI Interaction Matrix`.
+- The matrix must list every entry point, initial state, user action, expected UI
+  state, loading/disabled state, test coverage, and browser evidence path.
+- Tests must cover field visibility by label/role, every entry mode, selection
+  persistence, loading/disabled state, and submitted payload.
+- Completion requires `docs/evidence/{task}/ui-review.md` with the reviewed routes
+  or URLs, entry points, field visibility/layout result, selection persistence,
+  loading/disabled result, and screenshot path or explicit reason screenshots are
+  unavailable.
+- If there is no frontend interaction change, the plan must say
+  `N/A: no frontend interaction change`.
+
+## Branch Naming
+
+- Worktree feature work uses `feature/{name}`.
+- Bug fixes use the bugfix workflow and `fix/{name}`.
+- Urgent production/release fixes use the bugfix workflow and `hotfix/{name}` only when explicitly appropriate.
+- Do not invent personal, tool-specific, or ad-hoc branch prefixes without explicit user confirmation.
+- Do not create branches or worktrees silently. Before any `git checkout`,
+  `git switch`, or `git worktree add -b`, present the current branch, intended
+  base branch, proposed branch name, and proposed worktree path to the user.
+  Wait for explicit confirmation; the user may edit the branch name or path, and
+  those confirmed values are authoritative.
+
 ## When to Use
 
 - Multi-file feature needing a plan or design doc
@@ -122,15 +168,46 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 - File `docs/plans/{name}.md` exists
 - Contains: branch name, base branch + commit hash, worktree path, commit strategy, merge method
 - Contains: explicit **feature mode** (`tdd-feature` or `standard-feature`)
+- If the task changes frontend interaction UI, contains `## UI Interaction Matrix`; otherwise contains `N/A: no frontend interaction change`
+- If an OpenSpec change exists, contains `OpenSpec Change: <change-id>` and `## OpenSpec Traceability`
 
 **Then:** Update `docs/README.md` index. **STOP. Present plan to user. Wait for approval.**
 
 ### Phase 2: Start (main → worktree)
 
-4. `git worktree add ../{path} -b {branch} {base}`
+4. Confirm the exact branch name and worktree path with the user if they were
+   not explicitly approved in Phase 1.5. Then run
+   `git worktree add ../{path} -b feature/{name} {base}` using the confirmed
+   branch name and path.
 5. `mv` (NOT cp) planning artifacts from main to worktree
 6. Verify: main has ZERO plan-specific files
 7. Verify: worktree has ALL planning artifacts
+
+### Phase 2.5: Dependency Bootstrap (worktree only)
+
+Run this immediately after the worktree exists and before any Phase 3
+read/edit/build/test work in that worktree.
+
+1. `cd` into the confirmed worktree path.
+2. Inspect project signals before choosing a command: `README`, package manager
+   lockfiles, dependency manifests, language/framework config, and existing
+   scripts.
+3. Install dependencies with the project's own toolchain and lockfile:
+   - Node: use the lockfile/package manager (`pnpm install --frozen-lockfile`,
+     `npm ci`, `yarn install --frozen-lockfile` / `yarn install --immutable`,
+     or `bun install --frozen-lockfile`).
+   - Python: prefer project tooling (`uv sync`, `poetry install`, or a local
+     virtualenv + `pip install -r requirements*.txt`). Never install packages
+     globally.
+   - Go/Rust/Ruby/Java: use the project-native bootstrap (`go mod download`,
+     `cargo fetch`, `bundle install`, `mvn dependency:go-offline`, or the
+     repo's Gradle wrapper).
+   - Other stacks: follow the checked-in docs/scripts for that project.
+4. Verify the dependency bootstrap:
+   - install command exits successfully
+   - lockfiles are not unexpectedly modified
+   - if the repo defines a cheap baseline check, run it now
+5. If no dependency install is required, record the reason before moving on.
 
 ### Phase 3: Build (worktree only)
 
@@ -156,8 +233,10 @@ After completion, run CI check.
 
 **If manual:**
 8. All edits in worktree — never touch main
-9. Install deps, verify clean baseline
+9. Confirm Phase 2.5 dependency bootstrap is complete
 10. **不逐 task 提交** — 积累变更到 Phase 4（Ship）
+11. If an OpenSpec change exists, read its proposal/design/specs and run `openspec validate <change-id> --strict`
+12. If frontend interaction UI changed, create/update `docs/evidence/{task}/ui-review.md` and verify every entry in `## UI Interaction Matrix`
 
 Before any completion claim, the task must pass:
 
@@ -205,8 +284,12 @@ If the changeset includes new or modified routes (`src/routes/`) or page operati
 Before entering ship / publish / PR flow, run and pass:
 
 ```bash
-node scripts/check-task-gate.mjs --gate pre-pr
+node scripts/ci/check-task-gate.mjs --gate pre-pr
 ```
+
+If an OpenSpec change exists, final review must check every scenario listed in
+`## OpenSpec Traceability`. After merge or release, archive the change or record
+why archive is deferred.
 
 **If provider is a skill name:** Invoke that skill to complete the development branch.
 
@@ -256,7 +339,8 @@ This is optional — the skill works standalone — but projects with the templa
 | Create plan     | main     | `docs/plans/{name}.md`          |
 | Update index    | main     | Update `docs/README.md`         |
 | Human gate      | main     | Present and wait                |
-| Create worktree | main     | `git worktree add`    |
+| Create worktree | main     | `git worktree add ../{path} -b feature/{name} {base}` |
 | Move artifacts  | main→wt  | `mv` planning files   |
+| Install deps    | worktree | Use project language/framework lockfile/tooling |
 | Verify main     | main     | No plan files remain  |
 | All dev work    | worktree | Code, test, commit    |

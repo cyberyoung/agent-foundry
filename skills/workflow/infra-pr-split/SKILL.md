@@ -58,6 +58,13 @@ git checkout -b chore/infra-sync-from-<feature-branch>
 # 从功能分支 checkout 基础设施文件
 git checkout <feature-branch> -- AGENTS.md .claude/settings.json scripts/ .gitignore docs/README.md docs/TODO.md package.json ...
 
+# 清理残留：删除 main 有但 source 分支没有的文件（移动/重组导致）
+# git diff 检测不到（source 分支上文件从未被"删"过），用 ls-tree 对比
+comm -23 \
+  <(git ls-tree -r --name-only main -- scripts/ docs/ | sort) \
+  <(git ls-tree -r --name-only <feature-branch> -- scripts/ docs/ | sort) \
+  | xargs -r git rm --
+
 # 验证
 pnpm check:ci
 ```
@@ -91,3 +98,5 @@ git push
 | infra PR 依赖功能代码才能构建 | infra PR 必须独立通过 CI |
 | 忘记功能分支 merge main | infra 合入后必须同步 |
 | package.json 只 checkout 不检查 | 检查是否混入了功能依赖变更 |
+| 只 checkout 子目录而非整个目录 | 必须 checkout 整个目录，避免文件重组/移动后残留旧位置 |
+| 信任 git checkout 会自动处理文件移动 | git checkout 只更新已有路径不删源分支不存在的文件，必须显式 cleanup |

@@ -25,6 +25,51 @@ Mode semantics:
 - `tdd-feature` → requires failing-test-first evidence and stronger completion proof
 - `standard-feature` → does not require failing-test-first, but still requires a successful `pnpm check:task`
 
+## OpenSpec Lifecycle
+
+Feature work that adds a capability, changes behavior, changes architecture, or changes
+security / performance semantics must create or reference an OpenSpec change.
+
+If an OpenSpec change exists for the task:
+
+- Plan must declare `OpenSpec Change: <change-id>`.
+- Plan must include `## OpenSpec Traceability`.
+- Every OpenSpec `#### Scenario:` must map to a task and verification/test.
+- Implementation must read `proposal.md`, `design.md`, and `specs/**/spec.md`.
+- Implementation must run `openspec validate <change-id> --strict` before coding.
+- Final review must check every OpenSpec scenario for implementation and test coverage.
+- Completion must archive the change after merge/release or record a deferred-archive reason.
+
+`pnpm check:task --mode <mode>` must include `pnpm check:openspec-traceability`.
+
+## Frontend Interaction Gate
+
+When the task adds or changes modal, drawer, side panel, long-running button,
+mutation-driven UI, SSE-driven UI, polling-driven UI, or generated-content UI:
+
+- The design/plan must include `## UI Interaction Matrix`.
+- The matrix must list every entry point, initial state, user action, expected UI
+  state, loading/disabled state, test coverage, and browser evidence path.
+- Tests must cover field visibility by label/role, every entry mode, selection
+  persistence, loading/disabled state, and submitted payload.
+- Completion requires `docs/evidence/{task}/ui-review.md` with the reviewed routes
+  or URLs, entry points, field visibility/layout result, selection persistence,
+  loading/disabled result, and screenshot path or explicit reason screenshots are
+  unavailable.
+- If there is no frontend interaction change, the plan must say
+  `N/A: no frontend interaction change`.
+
+## Branch Naming
+
+- Standard and TDD feature work uses `feature/{name}`.
+- Bug fixes use the bugfix workflow and `fix/{name}`.
+- Urgent production/release fixes use the bugfix workflow and `hotfix/{name}` only when explicitly appropriate.
+- Do not invent personal, tool-specific, or ad-hoc branch prefixes without explicit user confirmation.
+- Do not create or switch branches silently. Before any `git checkout`,
+  `git switch`, or `git checkout -b`, present the current branch, intended base
+  branch, and proposed branch name to the user. Wait for explicit confirmation;
+  the user may edit the branch name, and that confirmed name is authoritative.
+
 ## When to Use
 
 - Task changes 2+ files
@@ -145,12 +190,16 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 - Contains: task breakdown with checkboxes
 - Contains: branch name, base branch + commit hash, commit strategy
 - Contains: explicit **feature mode** (`tdd-feature` or `standard-feature`)
+- If the task changes frontend interaction UI, contains `## UI Interaction Matrix`; otherwise contains `N/A: no frontend interaction change`
+- If an OpenSpec change exists, contains `OpenSpec Change: <change-id>` and `## OpenSpec Traceability`
 
 **Then:** Update `docs/README.md` index. **STOP. Present plan to user. Wait for approval.**
 
 ### Phase 2: Branch + Commit Plan
 
-7. `git checkout -b feature/{plan-name}`
+7. Confirm the exact branch name with the user if it was not explicitly approved
+   in Phase 1.5. Then run `git checkout -b feature/{plan-name}` using the
+   confirmed branch name.
 8. Commit plan artifacts: `git add .sisyphus/ && git commit -m "plan({domain}): {plan-name}"`
 
 ### Phase 3: Build (feature branch only)
@@ -169,7 +218,9 @@ After completion, run CI check.
 9. All edits on the feature branch — never switch back to main
 10. Track progress with TodoWrite
 11. **不逐 task 提交** — 积累变更到 Phase 4（Ship）
-12. Run `pnpm check:ci` (or project CI command) after completing implementation
+12. If an OpenSpec change exists, read its proposal/design/specs and run `openspec validate <change-id> --strict`
+13. Run `pnpm check:ci` (or project CI command) after completing implementation
+14. If frontend interaction UI changed, create/update `docs/evidence/{task}/ui-review.md` and verify every entry in `## UI Interaction Matrix`
 
 Before any completion claim, the task must pass:
 
@@ -212,12 +263,16 @@ If the changeset includes new or modified routes (`src/routes/`) or page operati
 
 ### Phase 4: Ship
 
+If an OpenSpec change exists, final review must check every scenario listed in
+`## OpenSpec Traceability`. After merge or release, archive the change or record
+why archive is deferred.
+
 **Provider dispatch:** Look up `ship` phase provider (same lookup as Phase 1).
 
 Before entering ship / publish / PR flow, run and pass:
 
 ```bash
-node scripts/check-task-gate.mjs --gate pre-pr
+node scripts/ci/check-task-gate.mjs --gate pre-pr
 ```
 
 **If provider is a skill name:** Invoke that skill to complete the development branch.
