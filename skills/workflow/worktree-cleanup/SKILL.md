@@ -61,6 +61,7 @@ For each target worktree:
 3. **Remove worktree** — `git worktree remove <path>` (force if untracked files)
 4. **Delete local branch** — `git branch -d` (safe), falls back to `-D` if PR is confirmed merged
 5. **Delete remote branch** — `git push origin --delete` — if remote branch already gone (auto-deleted on merge), silently succeeds
+6. **Merge memory** — merges `~/.claude/projects/<worktree-key>/memory/` back to main project's memory dir: copies new `.md` files, skips identical ones, keeps main's version on conflict, deduplicates MEMORY.md index
 
 ## Prerequisites
 

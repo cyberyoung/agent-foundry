@@ -127,6 +127,70 @@ merge_claude_settings() {
   return 0
 }
 
+# Convert filesystem path to ~/.claude/projects/ key
+# e.g. /Users/liyang/Workspace/vren/chogori → -Users-liyang-Workspace-vren-chogori
+path_to_project_key() {
+  echo "-$(echo "$1" | tr '/' '-')"
+}
+
+# Merge memory files from worktree's ~/.claude/projects/ dir back to main project.
+# Each worktree gets its own project dir under ~/.claude/projects/; without this,
+# any memories saved during worktree work are lost on cleanup.
+# Also cleans up the worktree's project dir (jsonl, wakatime, sessions-index, etc.).
+merge_memory() {
+  local worktree_path="$1"
+  local main_path="$2"
+
+  local wt_key main_key
+  wt_key="$(path_to_project_key "$worktree_path")"
+  main_key="$(path_to_project_key "$main_path")"
+
+  local wt_proj_dir="$HOME/.claude/projects/$wt_key"
+  local main_proj_dir="$HOME/.claude/projects/$main_key"
+
+  # No memory to merge — nothing to do
+  [ -d "$wt_proj_dir/memory" ] || return 0
+
+  info "Found worktree memory: $wt_proj_dir/memory"
+  mkdir -p "$main_proj_dir/memory"
+
+  # Copy memory .md files that don't exist in main
+  for f in "$wt_proj_dir/memory/"*.md; do
+    [ -f "$f" ] || continue
+    local basename
+    basename="$(basename "$f")"
+
+    if [ ! -f "$main_proj_dir/memory/$basename" ]; then
+      cp "$f" "$main_proj_dir/memory/$basename"
+      pass "复制 memory/$basename → 主项目"
+    elif ! cmp -s "$f" "$main_proj_dir/memory/$basename"; then
+      warn "memory/$basename 在主项目和工作树中都存在且不同，保留主项目版本"
+    fi
+  done
+
+  # Merge MEMORY.md index (unique lines from both)
+  local wt_index="$wt_proj_dir/memory/MEMORY.md"
+  local main_index="$main_proj_dir/memory/MEMORY.md"
+  if [ -f "$wt_index" ] && [ -f "$main_index" ]; then
+    if ! cmp -s "$wt_index" "$main_index"; then
+      local merged_index
+      merged_index="$(mktemp)"
+      awk '!seen[$0]++' "$main_index" "$wt_index" > "$merged_index"
+      if [ -s "$merged_index" ]; then
+        mv "$merged_index" "$main_index"
+        pass "合并 MEMORY.md 索引 → 主项目"
+      else
+        rm -f "$merged_index"
+      fi
+    fi
+  elif [ -f "$wt_index" ] && [ ! -f "$main_index" ]; then
+    cp "$wt_index" "$main_index"
+    pass "复制 MEMORY.md → 主项目"
+  fi
+
+  return 0
+}
+
 # Merge opencode.json from worktree back to main repo before deletion.
 # Handles mcp (object merge, wt overrides) and plugin (array join + dedupe).
 # .opencode/ directory is NOT merged — it stays under version control via git.
@@ -298,6 +362,11 @@ cleanup_one() {
   merge_opencode_settings "$path" "$main_repo" || {
     fail "合并 opencode.json 失败 — 中止清理（不删除 worktree）"
     return 1
+  }
+
+  # Step 1.8: Merge memory from ~/.claude/projects/ back to main project
+  merge_memory "$path" "$main_repo" || {
+    warn "合并 memory 失败 — 继续清理"
   }
 
   # Step 2: Remove worktree
