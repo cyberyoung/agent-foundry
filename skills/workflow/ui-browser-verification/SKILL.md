@@ -38,6 +38,34 @@ Verify the user-action boundary, not just source code or static DOM:
 5. If the boundary is not proven, classify the item as Needs proof instead of
    Real bug.
 
+## Hard Completion Gate
+
+For changes that affect user-visible UI behavior, browser evidence is a
+completion requirement. Do not mark the work complete, create a final commit, or
+request merge until the browser boundary has been verified, unless the user
+explicitly waives browser verification for that task.
+
+The following are not valid reasons to skip browser verification:
+
+- the in-app browser cannot type into the form
+- login is inconvenient or blocked in the first browser tool
+- the local backend lacks realistic data
+- the form has many required fields
+- unit tests, component tests, source inspection, or type checks passed
+
+If the first browser tool cannot prove the boundary, continue with another
+least-risk path before reporting a blocker:
+
+1. inject project-provided local auth state
+2. use a same-origin temporary page or browser console to write auth state
+3. mock or intercept backend requests with stable fixtures
+4. use Playwright, Chrome, CDP, or another scripted browser tool
+5. use a stable test account for real login when real permissions are required
+
+Only stop before these alternatives when they would require sensitive accounts,
+production data, destructive actions, real uploads, password-change final
+submits, or other user-confirmed sensitive operations.
+
 ## Browser RED/GREEN For Fixes
 
 When browser verification is part of a bugfix or PR-review TDD cycle, collect it
