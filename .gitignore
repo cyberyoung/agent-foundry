@@ -2,9 +2,19 @@
 .claude.json.backup
 claude.json
 dot-claude/
+dot-claude-shared/
 dot-codex/
 dot-omc/
 dot-omx/
+dot-cc-switch/
+dot-deepseek/
+dot-gemini/
+dot-pi/
+dot-proma/
+dot-claude.json
+dot-claude.json.*
+backups/
+.omc/
 
 # Internal-only docs
 docs/public-scope.md
@@ -27,4 +37,6 @@ scripts/restore-agents-link
 **/__pycache__/
 **/*.pyc
 **/.DS_Store
+**/.omc/
 **/.to_vault_output_history
+**/.to_vault_note_history
