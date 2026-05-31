@@ -89,6 +89,7 @@ def main():
     parser = argparse.ArgumentParser(description="生成文章阅读周笔记框架")
     parser.add_argument("yearmonth", help="年月，格式 YYYYMM，如 202604")
     parser.add_argument("--dry-run", action="store_true", help="预览但不创建文件")
+    parser.add_argument("--force", action="store_true", help="覆盖已存在的文件")
     parser.add_argument("--vault-root", default=None, help="Vault 根路径")
     args = parser.parse_args()
 
@@ -129,6 +130,9 @@ def main():
         print(f"W{week_num}: {week_start.strftime('%m-%d')} ~ {week_end.strftime('%m-%d')} -> {year_str}/{month_str}/{filename}")
 
         if not args.dry_run:
+            if target.exists() and not args.force:
+                print(f"  ✗ 跳过，文件已存在（用 --force 强制覆盖）")
+                continue
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
             print(f"  ✓ 已创建")

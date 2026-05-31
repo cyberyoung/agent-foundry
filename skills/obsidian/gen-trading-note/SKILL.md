@@ -10,7 +10,7 @@ description: 当用户需要为指定月份生成交易笔记框架时使用此 
 ## 文件组织
 
 - 脚本：`scripts/gen_trading.py`
-- 模板（参考）：`vault/templates/交易笔记模板.md`
+- 模板（参考）：`templates/交易笔记模板.md`（Vault 根目录 `templates/`）
 
 ## 输出结构
 
@@ -31,9 +31,23 @@ bash scripts/gen_trading.py 202604
 # 预览（不创建文件）
 bash scripts/gen_trading.py 202604 --dry-run
 
+# 强制覆盖已有文件
+bash scripts/gen_trading.py 202604 --force
+
 # 指定 vault 路径
 bash scripts/gen_trading.py 202604 --vault-root /path/to/vault
+
+# 强制刷新节假日缓存
+bash scripts/gen_trading.py 202604 --refresh-holidays
 ```
+
+### 节假日
+
+- 通过 [timor.tech](https://timor.tech/api/holiday) 免费 API 获取中国法定节假日
+- 数据缓存于 `~/.cache/gen-trading-note/holidays_{year}.json`
+- 自动跳过节假日，保留调休补班日
+- 用 `--refresh-holidays` 强制更新缓存
+- API 不可用时回退为仅跳过周末
 
 ### Skill 调用
 
