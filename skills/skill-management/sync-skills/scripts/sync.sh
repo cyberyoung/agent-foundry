@@ -145,6 +145,7 @@ load_config() {
 		TARGET_PATHS=("${BUILTIN_TARGETS_PATHS[@]}")
 		SKILL_TARGETS_JSON="{}"
 		DEFAULT_TARGETS_JSON="[]"
+		GROUPS_JSON="{}"
 		return
 	fi
 
@@ -160,6 +161,7 @@ load_config() {
 		TARGET_PATHS=("${BUILTIN_TARGETS_PATHS[@]}")
 		SKILL_TARGETS_JSON="{}"
 		DEFAULT_TARGETS_JSON="[]"
+		GROUPS_JSON="{}"
 	else
 		TARGET_NAMES=()
 		TARGET_PATHS=()
@@ -179,6 +181,7 @@ for name, path in data.get('targets', {}).items():
 
 	SKILL_TARGETS_JSON="$(echo "$config_json" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('skills',{})))" 2>/dev/null || echo "{}")"
 	DEFAULT_TARGETS_JSON="$(echo "$config_json" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('default_targets',[])))" 2>/dev/null || echo "[]")"
+	GROUPS_JSON="$(echo "$config_json" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('groups',{})))" 2>/dev/null || echo "{}")"
 }
 
 load_config
@@ -208,12 +211,30 @@ sys.exit(0 if '$name' in data else 1)
 
 get_skill_targets() {
 	local skill_name="$1"
+	local group_name="${2:-}"
 	python3 -c "
 import json, os, sys
 skill_targets = json.loads('$SKILL_TARGETS_JSON')
+groups_cfg = json.loads('$GROUPS_JSON')
 default_targets = json.loads('$DEFAULT_TARGETS_JSON')
-targets = skill_targets.get('$skill_name', default_targets if default_targets else None)
-if targets:
+
+def extract(val):
+    if isinstance(val, list):
+        return val
+    if isinstance(val, dict):
+        return val.get('targets', None)
+    return None
+
+targets = extract(skill_targets.get('$skill_name'))
+if targets is None and '$group_name':
+    grp = groups_cfg.get('$group_name')
+    if grp is not None:
+        targets = extract(grp)
+if targets is None:
+    targets = default_targets if default_targets else None
+if targets is not None and len(targets) == 0:
+    print('__EMPTY__')
+elif targets:
     for t in targets:
         print(t)
 " 2>/dev/null
@@ -237,20 +258,29 @@ if not os.path.exists(config_path):
     sys.exit(1)
 with open(config_path) as f:
     data = json.load(f)
-if data.get('config_version') == 2:
-    print('Config already at v2')
+cv = data.get('config_version', 1)
+if cv >= 3:
+    print('Config already at v3')
     sys.exit(0)
-backup = config_path + '.v1-backup'
+backup = config_path + f'.v{cv}-backup'
 import shutil
 shutil.copy2(config_path, backup)
 print(f'Backup: {backup}')
-builtin = {'claude':'~/.claude/skills','codex':'~/.codex/skills','opencode':'~/.config/opencode/skills','obsidian':'~/Documents/Obsidian Vault/.claude/skills'}
-data['config_version'] = 2
-data['targets'] = builtin
+if cv < 2:
+    builtin = {'claude':'~/.claude/skills','codex':'~/.codex/skills','opencode':'~/.config/opencode/skills','obsidian':'~/Documents/Obsidian Vault/.claude/skills'}
+    data['targets'] = builtin
+data['config_version'] = 3
+if 'groups' not in data:
+    data['groups'] = {}
+skills = data.get('skills', {})
+for k, v in skills.items():
+    if isinstance(v, list):
+        skills[k] = {'targets': v}
+data['skills'] = skills
 with open(config_path, 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
     f.write('\n')
-print('Migrated to v2')
+print('Migrated to v3 (from v' + str(cv) + ')')
 "
 	exit $?
 fi
@@ -327,11 +357,13 @@ conflict=0
 warned=0
 skip_upstream_count=0
 skip_target_count=0
+removed_mismatch=0
 
 sync_skill() {
 	local skill_path="$1"
 	local link_name="$2"
 	local is_upstream="$3"
+	local group_name="${4:-}"
 
 	if [ "$is_upstream" = "true" ] && [ "$UPSTREAM_SYNC" = "false" ]; then
 		for target_dir in "${TARGETS[@]}"; do
@@ -344,15 +376,36 @@ sync_skill() {
 	fi
 
 	local allowed_targets
-	allowed_targets="$(get_skill_targets "$link_name")"
+	allowed_targets="$(get_skill_targets "$link_name" "$group_name")"
+
+	# __EMPTY__ means explicitly configured as [] (no targets)
+	local explicit_empty=false
+	if [ "$allowed_targets" = "__EMPTY__" ]; then
+		explicit_empty=true
+		allowed_targets=""
+	fi
 
 	for target_dir in "${TARGETS[@]}"; do
 		local tname
 		tname="$(target_name_for_path "$target_dir")"
 		local link_path="$target_dir/$link_name"
 
-		if [ -n "$allowed_targets" ]; then
+		if [ -n "$allowed_targets" ] || [ "$explicit_empty" = true ]; then
 			if ! echo "$allowed_targets" | grep -qx "$tname"; then
+				if [ -L "$link_path" ]; then
+					local link_resolved
+					link_resolved="$(resolve_realpath "$link_path")"
+					if [[ "$link_resolved" == "$SKILLS_ROOT_RESOLVED"/* ]]; then
+						if [ "$DRY_RUN" = true ]; then
+							echo "[dry-run] would remove $link_path (not in target set)"
+						else
+							rm "$link_path"
+							echo "[removed-mismatch] $link_path (not in target set)"
+						fi
+						removed_mismatch=$((removed_mismatch + 1))
+						continue
+					fi
+				fi
 				echo "[skip-target] $tname $link_name"
 				skip_target_count=$((skip_target_count + 1))
 				continue
@@ -362,7 +415,11 @@ sync_skill() {
 		if [ -L "$link_path" ]; then
 			local current_target
 			current_target="$(readlink "$link_path")"
-			if [ "$current_target" = "$skill_path" ]; then
+			local current_resolved
+			current_resolved="$(resolve_realpath "$current_target")"
+			local skill_resolved
+			skill_resolved="$(resolve_realpath "$skill_path")"
+			if [ "$current_resolved" = "$skill_resolved" ]; then
 				skipped=$((skipped + 1))
 			else
 				local link_resolved
@@ -409,13 +466,13 @@ for entry in "$SKILLS_ROOT"/*/; do
 			exposed_name="${prefix}-${skill_name}"
 			is_up=false
 			is_upstream_skill "$exposed_name" && is_up=true
-			sync_skill "$skill_path" "$exposed_name" "$is_up"
+			sync_skill "$skill_path" "$exposed_name" "$is_up" "$entry_name"
 		done
 	else
 		[ -f "$entry/SKILL.md" ] || continue
 		is_up=false
 		is_upstream_skill "$entry_name" && is_up=true
-		sync_skill "$entry" "$entry_name" "$is_up"
+		sync_skill "$entry" "$entry_name" "$is_up" ""
 	fi
 done
 
@@ -426,7 +483,7 @@ if [ "$UPSTREAM_SYNC" = "true" ]; then
 			[ -d "$entry" ] || continue
 			[ -f "$entry/SKILL.md" ] || continue
 			entry_name="$(basename "$entry")"
-			sync_skill "$entry" "$entry_name" "true"
+			sync_skill "$entry" "$entry_name" "true" ""
 		done
 	fi
 fi
@@ -445,7 +502,7 @@ done
 
 echo ""
 if [ "$DRY_RUN" = true ]; then
-	echo "Dry-run: $created would create, $fixed would fix, $skipped unchanged, $conflict conflicts, $warned warnings, $skip_upstream_count skip-upstream, $skip_target_count skip-target"
+	echo "Dry-run: $created would create, $fixed would fix, $skipped unchanged, $conflict conflicts, $warned warnings, $skip_upstream_count skip-upstream, $skip_target_count skip-target, $removed_mismatch removed-mismatch"
 else
-	echo "Done: $created created, $fixed fixed, $skipped unchanged, $conflict conflicts, $warned warnings, $skip_upstream_count skip-upstream, $skip_target_count skip-target"
+	echo "Done: $created created, $fixed fixed, $skipped unchanged, $conflict conflicts, $warned warnings, $skip_upstream_count skip-upstream, $skip_target_count skip-target, $removed_mismatch removed-mismatch"
 fi
