@@ -53,6 +53,13 @@ assert_eq "primary resolver from linked worktree" "$PRIMARY" "$(primary_repo_roo
 assert_eq "canonical root" "$SANDBOX/worktrees/chogori" "$(canonical_worktree_root "$PRIMARY")"
 assert_eq "canonical path" "$SANDBOX/worktrees/chogori/abc-123" "$(canonical_worktree_path abc-123 "$PRIMARY")"
 
+NESTED_SANDBOX="$SANDBOX/nested"
+NESTED_PRIMARY="$NESTED_SANDBOX/chogori"
+git_init_repo "$NESTED_PRIMARY"
+mkdir -p "$NESTED_PRIMARY/internal-worktrees"
+ln -s "$NESTED_PRIMARY/internal-worktrees" "$NESTED_SANDBOX/worktrees"
+assert_fail "canonical root under primary repo is rejected" canonical_worktree_root "$NESTED_PRIMARY"
+
 for slug in '' '../escape' 'BadSlug' 'a_b' 'a/b' 'a b' '-bad'; do
   assert_fail "invalid slug rejects [$slug]" canonical_worktree_path "$slug" "$PRIMARY"
 done

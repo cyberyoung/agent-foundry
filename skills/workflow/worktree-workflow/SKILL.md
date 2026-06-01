@@ -204,9 +204,22 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 ### Phase 2: Start (main → worktree)
 
 4. Confirm the exact branch name and canonical worktree path with the user if
-   they were not explicitly approved in Phase 1.5. Create the repo bucket first:
-   `mkdir -p ../worktrees/{repo-name}`. Then create the worktree at
-   `../worktrees/{repo-name}/{slug}` using the confirmed branch name and base.
+   they were not explicitly approved in Phase 1.5. Resolve the canonical path
+   from the primary repo, then create the repo bucket and worktree with the same
+   absolute path basis:
+
+   ```bash
+   WORKFLOW_SKILL_ROOT="${WORKFLOW_SKILL_ROOT:-$HOME/etc/agents/skills/workflow}"
+   . "$WORKFLOW_SKILL_ROOT/worktree-cleanup/scripts/worktree-paths.sh"
+   PRIMARY_REPO="$(primary_repo_root .)"
+   BASE_REF="${BASE_REF:-origin/main}"
+   REPO_NAME="$(basename "$PRIMARY_REPO")"
+   PRIMARY_PARENT="$(dirname "$PRIMARY_REPO")"
+   WORKTREE_PARENT="$PRIMARY_PARENT/worktrees/$REPO_NAME"
+   WORKTREE_PATH="$WORKTREE_PARENT/{slug}"
+   mkdir -p "$WORKTREE_PARENT"
+   git -C "$PRIMARY_REPO" worktree add "$WORKTREE_PATH" -b "feature/{slug}" "$BASE_REF"
+   ```
 5. `mv` (NOT cp) planning artifacts from main to worktree
 6. Verify: main has ZERO plan-specific files
 7. Verify: worktree has ALL planning artifacts

@@ -79,14 +79,21 @@ canonical_worktree_root() {
   repo_name="$(repo_name_from_primary "$primary")"
   root="$workspace_root/worktrees/$repo_name"
 
-  root_parent="$(dirname "$root")"
-  if [ -e "$root_parent" ]; then
-    root_parent="$(physical_existing_path "$root_parent")" || return 1
-    root="$root_parent/$(basename "$root")"
+  if [ -e "$root" ]; then
+    root="$(physical_existing_path "$root")" || return 1
+  else
+    root_parent="$(dirname "$root")"
+    if [ -e "$root_parent" ]; then
+      root_parent="$(physical_existing_path "$root_parent")" || return 1
+      root="$root_parent/$(basename "$root")"
+    fi
   fi
 
   case "$primary/" in
     "$root"/*) worktree_paths_fail "primary checkout is inside canonical root"; return 1 ;;
+  esac
+  case "$root/" in
+    "$primary"/*) worktree_paths_fail "canonical root is inside primary checkout"; return 1 ;;
   esac
 
   printf '%s\n' "$root"
