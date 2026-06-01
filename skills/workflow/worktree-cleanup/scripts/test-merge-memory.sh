@@ -4,14 +4,11 @@
 
 set -uo pipefail
 
-SCRIPT="/Users/liyang/.claude/skills/wf-worktree-cleanup/scripts/worktree-cleanup.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT="$SCRIPT_DIR/worktree-cleanup.sh"
 
-# 提取到 main guard 前的函数定义
-TMP_FUNC="$(mktemp)"
-sed -n '/# --- Main ---/q;p' "$SCRIPT" > "$TMP_FUNC"
 # shellcheck disable=SC1090
-source "$TMP_FUNC"
-rm -f "$TMP_FUNC"
+source "$SCRIPT"
 
 set +e
 

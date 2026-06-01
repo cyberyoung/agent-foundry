@@ -5,13 +5,15 @@ description: "Clean up git worktrees whose PRs have been merged. Use when the us
 
 # Worktree Cleanup
 
-Clean up git worktrees after their PRs have been merged. Verifies merge status via GitHub before deleting anything.
+Clean up git worktrees after their PRs have been merged. Verifies merge status via GitHub before deleting anything. Automated cleanup is canonical-only: targets must be under `../worktrees/{repo-name}/{slug}`.
 
 ## Safety
 
-- **Never deletes a worktree whose PR is still open or has no PR** — always checks `gh pr list --state merged` first
+- **Never deletes a worktree outside `../worktrees/{repo-name}/{slug}`** — legacy sibling worktrees require inventory and manual confirmation
+- **Never deletes a worktree whose PR is still open, closed-unmerged, has no PR, or has a GitHub query error** — always checks `gh pr list --repo <owner/repo>` first
 - Handles repos that auto-delete remote branches on merge (silently skips the remote delete if branch is already gone)
-- Uses `git branch -d` (safe delete) first, falls back to `-D` only when PR merge is confirmed
+- Uses `git branch -d` (safe delete) first; force deletion requires proof that the branch head is safe relative to the merged baseline
+- Merges `.claude/settings.local.json`, `opencode.json`, and Claude memory from the worktree back to the primary repo before removal. If settings or opencode merge fails, cleanup stops and the worktree is preserved.
 
 ## Pre-flight (MANDATORY before running the script)
 
@@ -37,13 +39,13 @@ If the user's cwd is inside a worktree and they say "clean up this worktree":
 bash <skill-base-dir>/scripts/worktree-cleanup.sh "$(pwd)"
 ```
 
-**2. Clean a specific worktree**
+**2. Clean a specific canonical worktree**
 
 ```bash
-bash <skill-base-dir>/scripts/worktree-cleanup.sh /path/to/worktree
+bash <skill-base-dir>/scripts/worktree-cleanup.sh ../worktrees/{repo-name}/{slug}
 ```
 
-**3. Clean all merged worktrees**
+**3. Clean all merged canonical worktrees**
 
 ```bash
 bash <skill-base-dir>/scripts/worktree-cleanup.sh --all
@@ -53,15 +55,42 @@ bash <skill-base-dir>/scripts/worktree-cleanup.sh --all
 
 For each target worktree:
 
-1. **Identify branch** — extracts the branch name from `git worktree list`
-2. **Check PR status** — queries GitHub via `gh pr list --head <branch>`
+1. **Resolve primary repo** — uses the shared primary repo resolver, not porcelain `head -1`
+2. **Enforce canonical boundary** — refuses any target outside `../worktrees/{repo-name}/{slug}`
+3. **Identify branch** — extracts the branch name from `git worktree list`
+4. **Check PR status** — queries GitHub via `gh pr list --repo <owner/repo> --head <branch>`
    - `MERGED` → proceed with cleanup
    - `OPEN` → skip, warn user
+   - `CLOSED` → skip, warn user
    - `NO_PR` → skip, warn user
-3. **Remove worktree** — `git worktree remove <path>` (force if untracked files)
-4. **Delete local branch** — `git branch -d` (safe), falls back to `-D` if PR is confirmed merged
-5. **Delete remote branch** — `git push origin --delete` — if remote branch already gone (auto-deleted on merge), silently succeeds
-6. **Merge memory** — merges `~/.claude/projects/<worktree-key>/memory/` back to main project's memory dir: copies new `.md` files, skips identical ones, keeps main's version on conflict, deduplicates MEMORY.md index
+   - `GH_ERROR` → skip, warn user with the underlying error summary
+5. **Validate clean state** — blocks detached HEAD, merge/rebase/cherry-pick state, unstaged/staged/untracked files, missing upstream, unresolved upstream, and unpushed commits
+6. **Merge local agent state** — merges `.claude/settings.local.json`, `opencode.json`, and Claude memory into the primary repo
+7. **Remove worktree** — `git worktree remove <path>`; unexpected failure stops cleanup and does not unconditionally force remove
+8. **Clean leftover residue** — only for verified canonical target residue that is no longer registered as a worktree; empty parents are cleaned with `rmdir`
+9. **Delete local branch** — `git branch -d` first; stronger deletion only with safety proof
+10. **Delete remote branch** — `git push origin --delete` — if remote branch already gone (auto-deleted on merge), silently succeeds
+
+## Post-cleanup review summary (MANDATORY)
+
+After cleanup attempts finish, provide a factual review table of the exact
+things that happened. Do not summarize only the intended workflow. Include
+script successes, script skips, manual follow-up actions, moved/preserved files,
+remaining dirty state, and final verification.
+
+Use this table format:
+
+| Target | Branch | PR status | Actions actually performed | Result | Review notes |
+| --- | --- | --- | --- | --- | --- |
+| `/path/to/worktree` | `branch-name` | `#123 merged at YYYY-MM-DDTHH:MM:SSZ` | `git worktree remove`; deleted local branch; remote already gone | cleaned | Note any force delete, residual directory cleanup, moved files, skipped remote delete, or remaining files in main worktree |
+
+The final answer must also include:
+
+- Final `git worktree list` verification for each affected repository
+- Whether each target path still exists
+- Any files preserved outside the removed worktree and their new paths
+- Whether `.claude/settings.local.json`, `opencode.json`, and Claude memory were merged, skipped, or blocked
+- Any remaining untracked or modified files in the main worktree
 
 ## Prerequisites
 

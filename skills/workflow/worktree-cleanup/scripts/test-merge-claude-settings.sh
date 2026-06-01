@@ -5,14 +5,11 @@
 set -uo pipefail
 
 # 引入被测函数（修改后的 worktree-cleanup.sh）
-SCRIPT="/Users/liyang/.claude/skills/wf-worktree-cleanup/scripts/worktree-cleanup.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT="$SCRIPT_DIR/worktree-cleanup.sh"
 
-# 提取函数定义但不执行 main — sed 打印所有行直到 "# --- Main ---" 之前一行（macOS 兼容）
-TMP_FUNC="$(mktemp)"
-sed -n '/# --- Main ---/q;p' "$SCRIPT" > "$TMP_FUNC"
 # shellcheck disable=SC1090
-source "$TMP_FUNC"
-rm -f "$TMP_FUNC"
+source "$SCRIPT"
 
 # 关闭被 source 进来的 set -e — 测试脚本用自己的 assert 框架管理失败
 set +e
