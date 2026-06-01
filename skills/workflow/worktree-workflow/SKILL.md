@@ -7,9 +7,12 @@ description: Use when about to create a git worktree for feature work, before ru
 
 ## Overview
 
-Enforce plan-first → gate → move → worktree isolation for multi-file feature work. All planning happens on main FIRST, then artifacts physically move to the worktree.
+Enforce plan-first → gate → move → canonical worktree isolation for multi-file
+feature work. All planning happens on main FIRST, then artifacts physically move
+to `../worktrees/{repo-name}/{slug}`.
 
-**Core principle:** No `git worktree add` without a reviewed plan on main.
+**Core principle:** No worktree creation without a reviewed plan on main, and no
+automated worktree path outside `../worktrees/{repo-name}/{slug}`.
 
 ## Feature Mode
 
@@ -67,7 +70,7 @@ mutation-driven UI, SSE-driven UI, polling-driven UI, or generated-content UI:
 - Do not invent personal, tool-specific, or ad-hoc branch prefixes without explicit user confirmation.
 - Do not create branches or worktrees silently. Before any `git checkout`,
   `git switch`, or `git worktree add -b`, present the current branch, intended
-  base branch, proposed branch name, and proposed worktree path to the user.
+  base branch, proposed branch name, and proposed canonical worktree path to the user.
   Wait for explicit confirmation; the user may edit the branch name or path, and
   those confirmed values are authoritative.
 
@@ -89,18 +92,38 @@ Plan (main) ──gate──▶ Start (main→wt) ──gate──▶ Build (wt)
 
 **BLOCKING — complete every item in order. No skipping.**
 
+Use the primary repo resolver before any baseline or worktree path decision.
+The resolver derives `../worktrees/{repo-name}` from the primary repo root and
+is the only source for canonical worktree placement.
+
 ### Phase 0: Git State Check (MANDATORY FIRST STEP)
 
 Run this BEFORE anything else — even before exploring the codebase:
 
 ```bash
 git branch --show-current && git status --short && git worktree list
-git fetch origin main && git merge origin/main --ff-only
+PRIMARY_REPO="$(primary repo resolver result)"
+git -C "$PRIMARY_REPO" fetch origin main
 ```
 
 **Do NOT assume you know the current branch or worktree.** Other sessions or the user may have switched branches since your last turn. Verify, then proceed.
 
 **Do NOT skip the fetch.** Creating a worktree from a stale main is the #1 cause of avoidable merge conflicts.
+
+Use the primary repo resolver from `wf-worktree-cleanup/scripts/worktree-paths.sh`
+or the same algorithm: resolve `git rev-parse --path-format=absolute
+--git-common-dir`, map it back to the primary checkout, verify it is listed by
+`git worktree list --porcelain`, then derive
+`../worktrees/{repo-name}` from the primary repo parent.
+
+Baseline safety:
+
+- If the primary repo is on `main` and clean, update it with
+  `git -C "$PRIMARY_REPO" merge --ff-only origin/main`.
+- If the primary repo is on a feature branch, do not merge `origin/main` into
+  that feature branch. Use `origin/main` as the worktree creation baseline or
+  stop for human confirmation.
+- Never run a main update from an arbitrary linked worktree cwd.
 
 ### Phase 0.9: Interface Dependency Verification (MANDATORY before Plan)
 
@@ -159,14 +182,19 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 
 **Provider invocation instructions:**
 - Output to `docs/plans/{name}.md`
-- Must include: branch name, base branch + commit hash, worktree path, commit strategy, merge method
+- Must include: branch name, base branch + commit hash, canonical relative path,
+  resolver algorithm, commit strategy, merge method
 
 **If provider is a skill name:** Invoke that skill with above instructions.
 **If manual:** You are the provider — write the plan yourself.
 
 **Post-completion verification:**
 - File `docs/plans/{name}.md` exists
-- Contains: branch name, base branch + commit hash, worktree path, commit strategy, merge method
+- Contains: branch name, base branch + commit hash, canonical relative path,
+  resolver algorithm, commit strategy, merge method
+- Records only `../worktrees/{repo-name}/{slug}` and the resolver algorithm.
+  Runtime absolute paths may appear only in session logs or uncommitted runtime
+  files.
 - Contains: explicit **feature mode** (`tdd-feature` or `standard-feature`)
 - If the task changes frontend interaction UI, contains `## UI Interaction Matrix`; otherwise contains `N/A: no frontend interaction change`
 - If an OpenSpec change exists, contains `OpenSpec Change: <change-id>` and `## OpenSpec Traceability`
@@ -175,10 +203,10 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 
 ### Phase 2: Start (main → worktree)
 
-4. Confirm the exact branch name and worktree path with the user if they were
-   not explicitly approved in Phase 1.5. Then run
-   `git worktree add ../{path} -b feature/{name} {base}` using the confirmed
-   branch name and path.
+4. Confirm the exact branch name and canonical worktree path with the user if
+   they were not explicitly approved in Phase 1.5. Create the repo bucket first:
+   `mkdir -p ../worktrees/{repo-name}`. Then create the worktree at
+   `../worktrees/{repo-name}/{slug}` using the confirmed branch name and base.
 5. `mv` (NOT cp) planning artifacts from main to worktree
 6. Verify: main has ZERO plan-specific files
 7. Verify: worktree has ALL planning artifacts
@@ -235,7 +263,11 @@ After completion, run CI check.
 8. All edits in worktree — never touch main
 9. Confirm Phase 2.5 dependency bootstrap is complete
 10. **不逐 task 提交** — 积累变更到 Phase 4（Ship）
-11. If an OpenSpec change exists, read its proposal/design/specs and run `openspec validate <change-id> --strict`
+11. If an upstream skill such as `using-git-worktrees`,
+    `executing-plans`, or `subagent-driven-development` asks to create another
+    worktree, treat the already-created canonical worktree satisfies isolation
+    rule as authoritative. Do not create a second worktree.
+12. If an OpenSpec change exists, read its proposal/design/specs and run `openspec validate <change-id> --strict`
 12. If frontend interaction UI changed, create/update `docs/evidence/{task}/ui-review.md` and verify every entry in `## UI Interaction Matrix`
 
 Before any completion claim, the task must pass:
@@ -291,6 +323,9 @@ If an OpenSpec change exists, final review must check every scenario listed in
 `## OpenSpec Traceability`. After merge or release, archive the change or record
 why archive is deferred.
 
+Do not run cleanup from this skill. After the PR is merged and the user confirms
+the merged PR details, hand off to `wf-worktree-cleanup`.
+
 **If provider is a skill name:** Invoke that skill to complete the development branch.
 
 **If manual:** Show summary of changes to user. Do NOT push or create PR without explicit request.
@@ -310,6 +345,7 @@ why archive is deferred.
 | "The API should exist, user mentioned the path" | Mentioned ≠ documented. Verify or ask. Never assume.               |
 | "The interface is probably similar to others"   | Every interface must be independently verified.                    |
 | "I'll use the path from earlier in the conversation" | Earlier path may point to main repo, not the current worktree. Reconstruct from pwd. |
+| "I'll use repo-local `.worktrees/`, repo-local `worktrees/`, a global worktree dir, or a scattered sibling worktree" | Abort. Automated creation is canonical-only: `../worktrees/{repo-name}/{slug}`. |
 
 ## AGENTS.md Setup
 
@@ -339,7 +375,7 @@ This is optional — the skill works standalone — but projects with the templa
 | Create plan     | main     | `docs/plans/{name}.md`          |
 | Update index    | main     | Update `docs/README.md`         |
 | Human gate      | main     | Present and wait                |
-| Create worktree | main     | `git worktree add ../{path} -b feature/{name} {base}` |
+| Create worktree | main     | create `../worktrees/{repo-name}/{slug}` from the confirmed branch/base |
 | Move artifacts  | main→wt  | `mv` planning files   |
 | Install deps    | worktree | Use project language/framework lockfile/tooling |
 | Verify main     | main     | No plan files remain  |
