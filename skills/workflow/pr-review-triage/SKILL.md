@@ -15,6 +15,26 @@ Systematically process all review comments on a PR: classify, verify against cod
 2. **Judge by first principles, not by scope.** "Is this a bug?" is the only question. "Was this introduced in this PR?" is irrelevant — bot reviews mark code in the PR diff. "Not in this PR" must NEVER appear as a reason to skip or dismiss a finding. If code has a bug, fix it. Period.
 3. The ONLY valid reasons to skip a finding: (a) genuine false positive — bot misread the code, (b) architectural refactor needed, create a TODO. Nothing else.
 4. **Every fix follows TDD.** No production code without a failing test first. Write test → see it fail → implement fix → see it pass. No exceptions.
+5. **Every fix includes necessary regression coverage.** The RED test proves the
+   reported bug; additional regression tests protect adjacent entry points,
+   existing modes, boundary cases, and previously documented contracts that the
+   fix could accidentally break.
+6. **User-visible fixes include browser regression when needed.** If the fix
+   affects visible UI state, form defaults, enabled/disabled controls,
+   navigation, loading states, toasts, uploads, or async user-action timing, the
+   regression plan must include Browser GREEN, and Browser RED when proving a
+   real UI bug.
+7. **Every review item must include a coverage assessment for the touched
+   code.** The affected code path should be covered at 95% or higher; critical
+   paths such as data loss, authorization, submit payloads, destructive
+   actions, navigation, and async user-action gates should target 100%. If the
+   local tooling cannot measure that slice directly, use the narrowest available
+   file/branch/changed-line coverage plus targeted test evidence, and document
+   the limitation before approval.
+8. **Handle review items individually, then push as a batch.** Each deduped
+   review item gets its own TDD/proof cycle and its own commit by default.
+   After all approved item commits are ready, push once and wait once on the
+   resulting head SHA.
 
 ## When to Use
 
@@ -224,6 +244,41 @@ repo's `AGENTS.md`. Do not edit the upstream
 `dot-agents/skills/superpowers/receiving-code-review/SKILL.md`, because it is
 owned upstream and may be overwritten by upgrades.
 
+### 3a0.5 Abstraction-level and generator gate
+
+Review comments often identify a symptom at one changed file, not the correct
+ownership layer. Before proposing any fix, decide where the behavior belongs.
+Do not implement a repeated call-site patch until this gate is answered.
+
+Required checks:
+
+1. Identify the smallest owner that can enforce the contract for all current
+   and future callers:
+   - request/response layer for transport-wide response semantics
+   - shared component/hook for reusable UI behavior
+   - domain helper for one business domain shared by several pages
+   - page component only for genuinely page-specific behavior
+2. If the same wrapper, guard, toast, payload mapping, or conditional would be
+   needed in more than one page/call site, treat the page-level fix as a smell.
+   Prefer the shared owner unless concrete evidence shows the behavior differs
+   by page.
+3. Check whether generated code, templates, scaffolding scripts, managed blocks,
+   or copied reference implementations can create the same bug again.
+4. If a template/scaffold already produces the correct shape, add or update a
+   generator/template regression test that locks the contract. If it produces
+   the wrong shape, fix the template and add the regression test.
+5. Put regression tests at the same abstraction layer as the fix. Shared
+   behavior needs shared-component/helper/script tests; page tests should only
+   cover page-specific contracts or representative integration paths.
+
+The decision table notes for every code-change item must include:
+
+- `Abstraction owner`: chosen layer and why lower layers were not used
+- `Repeated patch check`: whether the proposed change would otherwise be
+  duplicated across call sites
+- `Generator/template impact`: changed, covered by regression test, or N/A
+- `Test level`: where RED and regression coverage live, matching the owner
+
 ### 3a. Read code to confirm whether the issue exists
 
 ```bash
@@ -289,6 +344,71 @@ table. After user approval, add the smallest targeted test first:
 Never turn a coverage gap into a production fix without first proving the bug
 with a failing test.
 
+### 3b.5.1 Regression coverage planning
+
+For every item that may change code, decide whether the minimal RED test is
+enough or whether additional regression tests are required.
+
+Required checks:
+
+1. Identify the affected contract: API payload, UI state, authorization,
+   lifecycle, shared component props, migration behavior, or script output.
+2. List adjacent modes and entry points that should remain unchanged. Examples:
+   manual vs automatic source, normal vs temporary flow, old enum values vs new
+   enum values, existing callers of a shared component, and existing CLI flags.
+3. Add regression tests when the fix touches shared code, branches by mode,
+   normalizes/clears data, changes defaults, or has a known previous behavior
+   that must be preserved.
+4. Assess the current regression coverage of the code touched by the review
+   item before choosing the test plan. Use the most precise available signal:
+   targeted test coverage, file coverage, branch/changed-line coverage, or
+   explicit contract tests when line coverage is unavailable.
+5. Plan coverage to keep the affected path at **95% or higher**. For critical
+   paths, plan **100% coverage of the decision branches involved in the review
+   finding**, including failure/empty/cleared states when relevant. Critical
+   paths include data loss, authorization, submit payload construction,
+   destructive actions, visible navigation, uploads, and async click/submit
+   gates.
+6. If the existing coverage is below the target, add regression tests or a
+   coverage-only proof step before changing production code. If the target is
+   impractical or not measurable with local tooling, record the reason and the
+   substitute evidence in the decision-table notes; do not silently skip it.
+7. When adjacent behavior is user-visible, regression coverage must include
+   browser/page verification unless the decision table records why component or
+   unit coverage is sufficient.
+8. If no additional regression test is needed, record the reason in the
+   decision-table notes, for example: "Regression tests: N/A, single pure helper
+   with exhaustive RED assertion."
+
+The decision table's `Test plan` must name both:
+
+- `RED`: the failing test that reproduces the review finding.
+- `Regression`: the additional passing tests or browser checks that prove
+  adjacent behavior was not broken.
+- `Coverage target`: existing coverage signal, planned target (95%+, or 100%
+  for critical paths), and the exact test/coverage command that will prove it.
+- `Browser Regression`: the route/user path and Browser GREEN evidence when
+  needed, or `N/A` with a reason when browser coverage is not needed.
+
+### 3b.5.2 Form field path vs payload path
+
+When a review finding says a form field should match an API payload path, such
+as changing `field="isActive"` to `field="filter.isActive"`, treat it as a
+contract-boundary claim, not a string rename.
+
+Required checks:
+
+1. Identify whether a hook, adapter, submit handler, payload builder, or list
+   abstraction maps form values into the final API payload.
+2. Verify the contract of that layer before accepting the reviewer's proposed
+   field path.
+3. The RED test must assert the final submitted/search payload shape or atom
+   state, not merely that a JSX `field` string was rendered.
+4. If the current code has only a field-string assertion, replace it with a
+   user-submission or payload-shape regression before changing production code.
+5. For user-visible filters, include browser request-body evidence when the
+   route can be exercised safely.
+
 ### 3b.6 Prove async UI races at the user-action boundary
 
 When a finding claims an async timing bug in UI code, such as `useEffect`
@@ -330,6 +450,9 @@ claim that "the user can see/click/submit/reach X", Phase 3 must include
 browser/page verification unless the item is classified as Needs proof and no
 verdict is being made yet. Execute the verification using
 `wf-ui-browser-verification`, then record the PR-triage evidence below.
+Do not replace this with source inspection or unit tests alone unless the
+decision table explicitly proves that the reviewed behavior is not visible at a
+user-action boundary.
 
 Record in the decision-table notes:
 
@@ -442,7 +565,11 @@ Then add short notes outside the table:
    Review comment (original): "..."
    Review comment (中文): "..."
    Evidence: `Updates(struct)` skips zero values; API allows clearing this field.
-   Test plan: RED `testZeroValueSkip`, GREEN after map/select update.
+   Abstraction owner: service payload builder, because all callers share the same update contract.
+   Repeated patch check: no duplicate call-site guards needed after the shared fix.
+   Generator/template impact: N/A, not generated code.
+   Test level: service helper RED plus API handler regression.
+   Test plan: RED `testZeroValueSkip`; Regression `testNonZeroUpdateStillWorks`; Coverage target 100% branch coverage for zero/non-zero payload selection via `pnpm vitest run ... --coverage`; Browser Regression N/A: API-only payload formatting; GREEN after map/select update.
    Planned reply: Fixed in `{hash}` after PR checks pass.
 ```
 
@@ -482,6 +609,14 @@ Write fix before test? DELETE IT. Start over.
 Write a test that reproduces the exact bug identified in the review finding.
 
 - The test MUST target the specific issue: wrong behavior, missing edge case, type violation, etc.
+- This RED test is not automatically sufficient regression coverage. Before
+  editing production code, also list the necessary regression tests from Phase
+  3b.5.1. Add them before or immediately after the minimal fix, and run them in
+  the GREEN verification.
+- For user-visible fixes, include Browser Regression in the approved plan:
+  Browser RED when proving the UI bug and Browser GREEN when proving adjacent
+  visible behavior still works. If browser coverage is not needed, record the
+  reason before editing production code.
 - If the approved fix includes a behavior-preserving implementation change,
   also apply `wf-bugfix`'s old-green/new-green characterization rule. Do not
   duplicate that rule here; `wf-bugfix` is the source of truth for this
@@ -517,12 +652,21 @@ Write ONLY the minimum code to make the test pass.
 ```bash
 # Run the test to confirm it now passes
 pnpm vitest run path/to/__tests__/file.test.tsx -t "test name"
+
+# Run the necessary regression tests named in the approved plan
+pnpm vitest run path/to/__tests__/file.test.tsx -t "regression test name"
+
+# Run the coverage command named in the approved plan when local tooling supports it
+pnpm vitest run path/to/__tests__/file.test.tsx --coverage
 ```
 
 **Required output:**
 
 ```
 GREEN: test_name — PASSES (bug fixed)
+REGRESSION: regression_test_name — PASSES (adjacent behavior preserved)
+COVERAGE: affected_path — 95%+ covered, or 100% for critical decision paths; command/evidence recorded
+BROWSER REGRESSION: /route -> action — PASSES, or N/A with reason
 ```
 
 For browser-visible findings, rerun Browser GREEN using
@@ -549,6 +693,11 @@ pnpm vitest run path/to/__tests__/
 | Test passes on first run (before fix) | Test is wrong — it didn't catch the bug. Rewrite it. |
 | Multiple bugs fixed in one cycle | STOP. One test per bug. Separate cycles. |
 | Test doesn't specifically target the bug | Rewrite test to assert the exact condition from the review finding. |
+| Fix has no regression coverage plan | STOP. Add necessary regression tests or record why none are needed before editing production code. |
+| Fix has no coverage assessment for the touched code | STOP. Add the coverage target and proof command to the plan before editing production code. |
+| Affected code stays below 95%, or a critical path stays below 100%, without approved justification | STOP. Add coverage or get explicit approval for the documented limitation before committing. |
+| User-visible fix has no Browser Regression plan | STOP. Add Browser RED/GREEN where needed, or record why component/unit coverage is sufficient. |
+| Regression test fails after GREEN | Fix the regression before proceeding; the review item is not complete. |
 | UI bug has only unit RED but no browser RED | Follow `wf-ui-browser-verification` for Browser RED before fixing, or stop and ask the user to approve a substitute evidence standard. |
 | Fix breaks other tests | Fix the regression before proceeding. All tests must pass. |
 
@@ -590,6 +739,11 @@ Hard gates:
   explicitly approves that exact grouping after seeing the commit plan.
 - A follow-up CI repair commit must be grouped by the independent CI root cause
   and must also pass this confirmation gate before committing.
+- The commit plan must show one commit per deduped review item by default. If
+  two independent review items would be grouped, stop and ask the user to
+  approve that exact exception.
+- Each commit row must include the source/test files that prove RED, regression
+  coverage, coverage target, and Browser Regression evidence when applicable.
 
 ### Per-Review Commit Strategy
 
@@ -599,8 +753,9 @@ body findings mapped to that row.
 
 Valid grouping:
 
-- One real bug/style finding -> one fix commit containing its RED/GREEN test
-  and minimal source changes.
+- One real bug/style finding -> one fix commit containing its RED/GREEN test,
+  necessary regression tests, coverage proof for the affected path, Browser
+  Regression evidence when needed, and minimal source changes.
 - One false-positive coverage item -> one test-only coverage commit, if the
   approved plan keeps coverage.
 - One deferred item -> one TODO/doc commit.
@@ -652,14 +807,16 @@ finding.
 2. Confirm every approved fix/deferred/test-only item has its own local commit
    grouped by review item, or that the user explicitly approved a documented
    exception.
-3. Push the branch containing the completed commit batch.
-4. Capture the head SHA after push: `git rev-parse HEAD`.
-5. Wait until PR checks for that SHA finish.
-6. If any check fails or is cancelled, do NOT reply/resolve review threads.
+3. Confirm the commits have not been pushed one by one; the default is a single
+   batch push after all approved per-review commits are complete.
+4. Push the branch containing the completed commit batch.
+5. Capture the head SHA after push: `git rev-parse HEAD`.
+6. Wait until PR checks for that SHA finish.
+7. If any check fails or is cancelled, do NOT reply/resolve review threads.
    Enter the CI failure triage loop below.
-7. Only continue to Phase 5 when all required PR checks for the current head SHA
+8. Only continue to Phase 5 when all required PR checks for the current head SHA
    are successful.
-8. **Re-run Phase 1 Step 2 (review bodies) immediately after checks pass.** Bot
+9. **Re-run Phase 1 Step 2 (review bodies) immediately after checks pass.** Bot
    reviewers trigger on every new commit and can post new P1/P2 review bodies
    after the push. Do NOT proceed to Phase 5 reply/resolve until the fresh
    inventory confirms zero new findings.
@@ -803,7 +960,7 @@ Output a summary report:
 ```
 PR #{number} review triage complete:
 - Total: {total} comments
-- Fixed: {fixed} ({files}) — all TDD verified (RED→GREEN)
+- Fixed: {fixed} ({files}) — all TDD verified (RED→GREEN) with necessary regression coverage, 95%+ affected-path coverage / 100% critical-path coverage where applicable, and Browser Regression where needed
 - Commits: {per_finding_commits}; CI repair commits: {ci_repair_commits_or_none}
 - Dismissed (false positive): {dismissed}
 - Deferred: {deferred}
@@ -846,7 +1003,12 @@ PR #{number} review triage complete:
 | Write fix code before a failing test | Delete fix code. Write test first. TDD is non-negotiable for ALL fixes. |
 | Fix + refactor unrelated code in same cycle | Fix only what the test covers. Refactor only what the fix touches. |
 | Skip writing a test because "it's a simple fix" | No exceptions. Every fix gets a test. "Simple" fixes are where hidden bugs live. |
+| Add only the narrow RED test and skip adjacent behavior | Add necessary regression tests for neighboring modes, entry points, and preserved contracts, or explicitly record why none are needed. |
+| Skip coverage assessment for the reviewed code path | Record current coverage, target 95%+ for affected paths, and 100% for critical branches, or document the tooling limitation and substitute evidence. |
+| Treat PR-level coverage as enough when a critical path is untested | Add targeted tests for the reviewed critical path; broad suite coverage cannot hide an uncovered data-loss/auth/submit/destructive/navigation/upload branch. |
+| Treat browser regression as optional for visible UI changes | Add Browser Regression to the plan, or explicitly record why component/unit coverage proves the visible contract. |
 | Report fix as done without showing RED→GREEN | Every fix reply must reference the test name and confirm RED→GREEN cycle. |
+| Squash independent review fixes into one convenience commit | Commit each deduped review item separately by default, then push the completed batch once. |
 | Push and wait PR checks after every finding by default | Commit each approved review item separately after commit confirmation, push the approved batch once, then wait once on the batch head SHA. |
 | Reply/resolve immediately after push | Wait for PR checks on the pushed head SHA; fix failures before replying/resolving the batch. |
 | Fix multiple CI failures in one blob commit | Group failures by root cause; commit each independent CI repair separately, then push the repair batch once. |
