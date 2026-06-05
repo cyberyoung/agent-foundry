@@ -224,6 +224,44 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 6. Verify: main has ZERO plan-specific files
 7. Verify: worktree has ALL planning artifacts
 
+#### Dirty Main Migration (when main already has mixed edits)
+
+If `main` already contains uncommitted changes before the worktree is created,
+do not keep working on `main` and do not manually copy files into the worktree.
+Migrate the dirty state as a single source of truth.
+
+1. Classify the dirty state before migration:
+   - planning artifacts: PRD/design/plan/evidence/OpenSpec docs created for the
+     feature
+   - governance/tooling changes: scripts, package scripts, hooks, CI,
+     templates, AGENTS/rules
+   - product/source changes: implementation files for the feature
+   - generated scratch files: temporary tool output such as `.tmp/`,
+     `.reasonix/`, logs, screenshots, or local caches
+   - cross-repo sync changes: files in another repository that must be handled
+     in that repository, not inside this worktree
+2. Preserve the exact dirty state with `git stash push -u` or an equivalent
+   patch-based migration that includes tracked, untracked, deleted, and renamed
+   files. Do not rely on `cp`; copies create divergent sources of truth.
+3. Generated scratch files should not enter the worktree unless they are named
+   deliverables in the plan. Remove or archive them outside the repo before the
+   final main-clean verification.
+4. Create the canonical worktree from the confirmed base branch/path, then apply
+   the saved dirty state in the worktree.
+5. Verify the worktree status contains every intended dirty change, including
+   deletions/renames and untracked artifacts.
+6. Verify the main checkout is clean after migration:
+
+   ```bash
+   git status --short
+   ```
+
+   Main may retain only explicitly out-of-scope files that are documented and
+   handled separately, such as a different repository's sync change. It must not
+   retain plan-specific files or feature/governance edits for the migrated task.
+7. After migration, all further edits, validation, and commits happen in the
+   worktree. Do not continue editing main for the migrated task.
+
 ### Phase 2.5: Dependency Bootstrap (worktree only)
 
 Run this immediately after the worktree exists and before any Phase 3
@@ -250,6 +288,31 @@ read/edit/build/test work in that worktree.
    - if the repo defines a cheap baseline check, run it now
 5. If no dependency install is required, record the reason before moving on.
 
+### Phase 2.6: Baseline Build and CodeGraph Init (worktree only)
+
+Run this immediately after Phase 2.5 and before any Phase 3 source read/edit
+work. This is a blocking gate, not a best-effort cleanup step.
+
+1. Read the project's own setup/build instructions before choosing commands:
+   `AGENTS.md`, `README.md`, checked-in docs, lockfiles, dependency manifests,
+   language/framework config, and existing scripts.
+2. Resolve exactly one baseline build path:
+   - If project docs declare concrete worktree bootstrap/build commands, run
+     those commands and mark the baseline build complete.
+   - Otherwise infer from project signals: package-manager scripts, `Makefile`,
+     `go.mod`, `Cargo.toml`, Gradle/Maven files, `pyproject.toml`, etc.
+   - Do not run both the documented project command and a second inferred build.
+3. The resolved baseline build must exit successfully before implementation
+   starts. If it fails, stop and report the failure.
+4. Initialize CodeGraph for the new worktree:
+
+   ```bash
+   codegraph init -i .
+   codegraph status .
+   ```
+
+5. If CodeGraph initialization or status fails, stop and report the failure.
+
 ### Phase 3: Build (worktree only)
 
 #### Working Directory Verification (MANDATORY before every file operation)
@@ -274,7 +337,8 @@ After completion, run CI check.
 
 **If manual:**
 8. All edits in worktree — never touch main
-9. Confirm Phase 2.5 dependency bootstrap is complete
+9. Confirm Phase 2.5 dependency bootstrap and Phase 2.6 baseline build /
+   CodeGraph init are complete
 10. **不逐 task 提交** — 积累变更到 Phase 4（Ship）
 11. If an upstream skill such as `using-git-worktrees`,
     `executing-plans`, or `subagent-driven-development` asks to create another
@@ -335,6 +399,28 @@ pnpm check:workflow:pre-pr
 If an OpenSpec change exists, final review must check every scenario listed in
 `## OpenSpec Traceability`. After merge or release, archive the change or record
 why archive is deferred.
+
+#### PR Title Gate
+
+Before creating or editing a PR, derive the PR title from the branch / PRD /
+plan objective and the expected lifetime of the PR, not from the latest commit
+subject. Commit titles may describe one narrow slice; PR titles must describe
+the user-visible or project-level change that the PR will ultimately carry.
+
+1. Read the branch name, PRD title, plan title, and the user's latest stated
+   goal.
+2. Determine whether this PR is a long-lived feature PR or a separate supporting
+   PR that will merge independently.
+3. For a long-lived feature PR, use the feature / PRD title itself. Do not append
+   the current incremental scope such as "gate", "skeleton", "phase 1 docs", or
+   "tests" just because those are the only commits pushed so far.
+4. Only for a separate supporting PR that will merge independently from the
+   feature branch, use `{system area}: {supporting scope}`.
+5. Compare the drafted title against the latest commit subject. If they are the
+   same only because the commit subject was copied, stop and rewrite the PR
+   title at the branch objective level.
+6. Before `gh pr create` or `gh pr edit`, include the intended title in the
+   user-facing update or final report.
 
 Do not run cleanup from this skill. After the PR is merged and the user confirms
 the merged PR details, hand off to `wf-worktree-cleanup`.

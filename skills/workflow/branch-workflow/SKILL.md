@@ -275,6 +275,28 @@ Before entering ship / publish / PR flow, run and pass:
 pnpm check:workflow:pre-pr
 ```
 
+#### PR Title Gate
+
+Before creating or editing a PR, derive the PR title from the branch / PRD /
+plan objective and the expected lifetime of the PR, not from the latest commit
+subject. Commit titles may describe one narrow slice; PR titles must describe
+the user-visible or project-level change that the PR will ultimately carry.
+
+1. Read the branch name, PRD title, plan title, and the user's latest stated
+   goal.
+2. Determine whether this PR is a long-lived feature PR or a separate supporting
+   PR that will merge independently.
+3. For a long-lived feature PR, use the feature / PRD title itself. Do not append
+   the current incremental scope such as "gate", "skeleton", "phase 1 docs", or
+   "tests" just because those are the only commits pushed so far.
+4. Only for a separate supporting PR that will merge independently from the
+   feature branch, use `{system area}: {supporting scope}`.
+5. Compare the drafted title against the latest commit subject. If they are the
+   same only because the commit subject was copied, stop and rewrite the PR
+   title at the branch objective level.
+6. Before `gh pr create` or `gh pr edit`, include the intended title in the
+   user-facing update or final report.
+
 **If provider is a skill name:** Invoke that skill to complete the development branch.
 
 **If manual:**
