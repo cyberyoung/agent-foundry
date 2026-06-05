@@ -329,7 +329,7 @@ If the changeset includes new or modified routes (`src/routes/`) or page operati
 Before entering ship / publish / PR flow, run and pass:
 
 ```bash
-node scripts/ci/check-task-gate.mjs --gate pre-pr
+pnpm check:workflow:pre-pr
 ```
 
 If an OpenSpec change exists, final review must check every scenario listed in

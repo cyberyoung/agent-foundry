@@ -272,7 +272,7 @@ why archive is deferred.
 Before entering ship / publish / PR flow, run and pass:
 
 ```bash
-node scripts/ci/check-task-gate.mjs --gate pre-pr
+pnpm check:workflow:pre-pr
 ```
 
 **If provider is a skill name:** Invoke that skill to complete the development branch.

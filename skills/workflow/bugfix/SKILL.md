@@ -393,7 +393,7 @@ Before any completion claim, run and pass:
 
 ```bash
 pnpm check:task --mode bugfix
-node scripts/ci/check-task-gate.mjs --gate completion --mode bugfix
+pnpm check:workflow:completion -- --mode bugfix
 ```
 
 If an OpenSpec change exists, final review must check every scenario listed in
