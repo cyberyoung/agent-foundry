@@ -149,11 +149,29 @@ For every API path mentioned in user requirements:
 
 ### Phase 0.9: PRD Check
 
-Check if `docs/prds/` has a PRD document for this task. If not, ask the user to write one first. The PRD is the user's description of the requirements — do not write it yourself.
+Check if `docs/prds/` has a PRD document for this task.
+
+PRD is preferred but not a hard blocker:
+
+- If a PRD exists, use it as the requirements source and derive `{name}` from
+  the PRD filename.
+- If no PRD exists but the user has already provided clear requirements in the
+  conversation, treat that conversation as the requirements source. Create a
+  lightweight PRD from those user-provided requirements either before the design
+  phase or after creating the worktree if the user explicitly wants to start
+  from an isolated worktree first.
+- If no PRD exists and the conversation does not contain enough requirements to
+  define success criteria, ask the user for the missing requirements before
+  design or implementation.
+
+Do not invent requirements that were not stated by the user.
 
 ### Phase 1: Design (on MAIN)
 
-Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md` → `{name}` = `foo`.
+Derive `{name}` from the PRD filename when a PRD exists (strip extension). E.g.,
+`docs/prds/foo.md` → `{name}` = `foo`. If the PRD will be created from a
+confirmed conversation requirement, choose a short kebab-case name from that
+requirement and use the same `{name}` for PRD/design/plan artifacts.
 
 **Provider dispatch:**
 1. Check if the PRD has a "Workflow Providers" section → use it for `design` phase
@@ -162,7 +180,8 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
 
 **Provider invocation instructions:**
 - Output to `docs/designs/{name}.md`
-- Link to PRD in `docs/prds/`
+- Link to PRD in `docs/prds/` when one exists; if the PRD is deferred, record
+  the conversation requirement source and the planned PRD path.
 - Use `docs/PLAN_TEMPLATE.md` as template if available
 
 **If provider is a skill name:** Invoke that skill with above instructions.
@@ -218,11 +237,21 @@ Derive `{name}` from the PRD filename (strip extension). E.g., `docs/prds/foo.md
    WORKTREE_PARENT="$PRIMARY_PARENT/worktrees/$REPO_NAME"
    WORKTREE_PATH="$WORKTREE_PARENT/{slug}"
    mkdir -p "$WORKTREE_PARENT"
-   git -C "$PRIMARY_REPO" worktree add "$WORKTREE_PATH" -b "feature/{slug}" "$BASE_REF"
+   git -C "$PRIMARY_REPO" worktree add --no-track "$WORKTREE_PATH" -b "feature/{slug}" "$BASE_REF"
    ```
 5. `mv` (NOT cp) planning artifacts from main to worktree
-6. Verify: main has ZERO plan-specific files
-7. Verify: worktree has ALL planning artifacts
+6. Verify the new branch does not accidentally track the base branch:
+
+   ```bash
+   git -C "$WORKTREE_PATH" status -sb
+   git -C "$WORKTREE_PATH" config --get-regexp '^branch\..*\.(remote|merge)' || true
+   ```
+
+   A freshly created worktree branch from `origin/main` must not report
+   `...origin/main` in `status -sb`. Set upstream only during the approved push
+   flow, normally to the same-named remote branch.
+7. Verify: main has ZERO plan-specific files
+8. Verify: worktree has ALL planning artifacts
 
 #### Dirty Main Migration (when main already has mixed edits)
 
@@ -434,11 +463,11 @@ the merged PR details, hand off to `wf-worktree-cleanup`.
 | Thought                                         | Reality                                                            |
 | ----------------------------------------------- | ------------------------------------------------------------------ |
 | "I know which branch/worktree I'm on"           | You don't. Other sessions or user may have switched. Always check. |
-| "Let me create the worktree first, plan later"  | Plan FIRST. Always.                                                |
+| "Let me create the worktree first, plan later"  | Usually plan first; worktree-first is allowed only for lightweight or explicitly approved flows, and PRD/design/plan still must be created before implementation. |
 | "I'll write the design doc in the worktree"     | Design doc starts on main, moves via `mv`.                         |
 | "Need to create PR early"                       | PR comes AFTER worktree setup with proper plan.                    |
 | "User said urgent"                              | Urgency does not override the checklist.                           |
-| "I'll add the plan file later"                  | Later never comes. Plan before `git worktree add`.                 |
+| "I'll add the plan file later"                  | Do not start implementation until the plan exists and has been reviewed. |
 | "I can cp instead of mv"                        | `mv` only. Single source of truth.                                 |
 | "I already know what to do, skip planning"      | Plans catch gaps you don't see. Write it.                          |
 | "The API should exist, user mentioned the path" | Mentioned ≠ documented. Verify or ask. Never assume.               |
