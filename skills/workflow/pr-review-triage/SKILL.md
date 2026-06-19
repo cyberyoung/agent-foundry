@@ -11,6 +11,12 @@ Systematically process all review comments on a PR: classify, verify against cod
 
 **Core principles:**
 
+0. **Target standard is the chogori-style review model.** Every PR review
+   triage should first reason in terms of closeout level (L0-L4 or the
+   repository's closest equivalent), owner-layer fix, shared blast radius,
+   regression coverage target, batch push, provider PR checks, and
+   post-resolve inventory. Repositories may lack the exact chogori tooling, but
+   the standard must not disappear from the decision process.
 1. Bot suggestions are hypotheses, not facts. Every finding must be verified against source code and API documentation before acting.
 2. **Judge by first principles, not by scope.** "Is this a bug?" is the only question. "Was this introduced in this PR?" is irrelevant — bot reviews mark code in the PR diff. "Not in this PR" must NEVER appear as a reason to skip or dismiss a finding. If code has a bug, fix it. Period.
 3. The ONLY valid reasons to skip a finding: (a) genuine false positive — bot misread the code, (b) architectural refactor needed, create a TODO. Nothing else.
@@ -31,10 +37,35 @@ Systematically process all review comments on a PR: classify, verify against cod
    local tooling cannot measure that slice directly, use the narrowest available
    file/branch/changed-line coverage plus targeted test evidence, and document
    the limitation before approval.
-8. **Handle review items individually, then push as a batch.** Each deduped
+8. **Compatibility fallback is a controlled exception, not a downgrade.** If a
+   repository lacks L0-L4 docs, coverage tooling, pre-push hooks, provider PR
+   checks, or review-thread APIs, record the missing capability, the substitute
+   evidence, and residual risk. If a repo explicitly declares a hard gate,
+   skipping it requires user approval unless this skill or the repo rules
+   explicitly allow deduplication through already-run pre-push/provider checks.
+9. **Handle review items individually, then push as a batch.** Each deduped
    review item gets its own TDD/proof cycle and its own commit by default.
-   After all approved item commits are ready, push once and wait once on the
+   The commit plan is the per-review grouping map, not a separate approval
+   gate. After all local item commits are ready, push once and wait once on the
    resulting head SHA.
+
+## Repository Capability Check
+
+Before the decision table, identify which verification capabilities the current
+repository has. This is a quick inventory, not a reason to weaken standards.
+
+| Capability | Target Standard | If Missing |
+| ---------- | --------------- | ---------- |
+| Closeout levels | Chogori-style L0-L4 or equivalent risk tiers | Map each item to local / slice / feature / governance risk and record that L0-L4 tooling is unavailable. |
+| Task gate | Focused task verification with explicit scope/test command | Use focused tests and owner suites; report that structured task gate is unavailable. |
+| Coverage gate | Changed-line, file, branch, or scoped coverage for touched code | Use narrow test evidence and explicit branch/decision assertions; record coverage tooling limitation. |
+| Pre-push hook | Structural checks plus changed-line coverage before push | Run the closest local checks available; do not claim pre-push coverage if no hook exists. |
+| Provider PR checks | Current-head CI checks after push | Use local checks only if no provider exists, and report the missing provider-backed proof. |
+| Review-thread API | Reply/resolve inline threads and list full inventory | Use the available review mechanism, but record limitations and avoid claiming all threads resolved if inventory is incomplete. |
+
+Do not silently use a lower standard because the repository is weaker than
+chogori. A fallback is valid only when the final report names
+`Standard Expected`, `Actual Evidence`, `Exception Reason`, and `Residual Risk`.
 
 ## When to Use
 
@@ -49,12 +80,18 @@ PR number (or auto-detect from current branch).
 ## The Flow
 
 ```
-Fetch ──▶ Inventory audit ──▶ Classify ──▶ Verify ──▶ Decision table ──▶ Wait for user approval ──▶ TDD fixes ──▶ Commit plan ──▶ Wait for commit approval ──▶ Per-review commits ──▶ Batch push + PR checks ──▶ Batch reply/resolve ──▶ Report
+Fetch ──▶ Inventory audit ──▶ Classify ──▶ Verify ──▶ Decision table ──▶ Wait for user approval ──▶ TDD fixes ──▶ Per-review commit plan ──▶ Per-review commits ──▶ Batch push + PR checks ──▶ Batch reply/resolve old threads ──▶ Re-fetch reviews/new threads ──▶ Report
                                                                                                                                         ▲                                                                       │
-                                                                                                                                        └────────────────────────────  re-run Phase 1 after every push ──────────┘
+                                                                                                                                        └────────────────────  if new findings appear, rerun Phase 1 ────────────┘
 ```
 
-**After every `git push` that modifies code on the PR branch, re-run Phase 1 completely (inline threads + review bodies + review comments).** Bot reviewers re-run on new commits and can produce new P1/P2 findings in review bodies that were not present in the previous fetch. Skipping this re-fetch is the #1 cause of missed findings.
+**After every `git push` that modifies code on the PR branch, wait for PR
+checks on the pushed head SHA first. Once checks are green, reply and resolve
+the old threads that were already approved in the current batch, then re-run
+Phase 1 completely (inline threads + review bodies + review comments) to find
+new bot findings.** Bot reviewers re-run on new commits and can produce new
+P1/P2 findings in review bodies that were not present in the previous fetch.
+Skipping this post-resolve re-fetch is the #1 cause of missed findings.
 
 ## Phase 1: Fetch & Inventory
 
@@ -120,7 +157,11 @@ Hard gate:
 
 codex-connector bot 的 findings 大部分在 review body 中，不在 inline threads。**跳过此步 = 漏掉大部分 findings。**
 
-**This step is NOT a one-time check.** Re-run it every time a new commit is pushed to the PR, because bot reviewers trigger on new commits and post new review bodies. After Phase 4.5 (push), restart from Step 2 before declaring the inventory empty.
+**This step is NOT a one-time check.** Re-run it every time a new commit is
+pushed to the PR, because bot reviewers trigger on new commits and post new
+review bodies. After Phase 4.5 (push + green checks) and Phase 5
+(reply/resolve the old approved threads), restart from Step 2 before declaring
+the inventory empty.
 
 ```bash
 # 提取所有含 P1/P2 Badge 的 review body
@@ -164,7 +205,9 @@ Inventory:
 **Hard gates** — stop and do NOT classify, fix, commit, push, reply, or resolve if any of:
 
 - The inline source says `hasNextPage=true`, `fetched < total`, or connector comparison was skipped when the connector is available.
-- Review body findings were **not re-fetched after the latest push** — stale review bodies from a previous commit are invalid inventory.
+- Review body findings were **not re-fetched after the latest pushed batch's
+  old approved threads were replied/resolved** — stale review bodies from a
+  previous commit are invalid inventory.
 - The user-pasted finding does not appear in the fetched inventory: keep it as a separate candidate item and verify it; do not discard it silently.
 - The fetched inventory contains findings the user did not paste: include them in the decision table too.
 
@@ -550,12 +593,12 @@ text and a concise Chinese translation in the per-item notes below the table.
 Do not add these as wide table columns.
 
 ```
-| # | File | Level | Verdict | Action | Thread(s) |
-|---|------|-------|---------|--------|-----------|
-| 1 | service/foo.go:42 | P2 | Real bug | TDD fix + checks | PRRT_xxx |
-| 2 | handler/bar.go:95 | P2 | False positive | Reply + resolve | PRRT_yyy |
-| 3 | scripts/x.sh:12 | P2 | Deferred | TODO + resolve | review body |
-| 4 | service/baz.go:88 | P2 | Needs proof | Coverage-first test | PRRT_zzz |
+| # | File | Level | Verdict | Closeout | Impact Scope | Regression Coverage | Action | Thread(s) |
+|---|------|-------|---------|----------|--------------|---------------------|--------|-----------|
+| 1 | service/foo.go:42 | P2 | Real bug | L1/local | request payload owner; no generated code | current gap; target 100% branch | TDD fix + checks | PRRT_xxx |
+| 2 | handler/bar.go:95 | P2 | False positive | L0/no code | handler only | existing test proves contract | Reply + resolve | PRRT_yyy |
+| 3 | scripts/x.sh:12 | P2 | Deferred | L4/governance | shared CI helper | TODO, no code change | TODO + resolve | review body |
+| 4 | service/baz.go:88 | P2 | Needs proof | L2/shared | shared hook + consumers | coverage-first test required | Coverage-first test | PRRT_zzz |
 ```
 
 Then add short notes outside the table:
@@ -568,24 +611,31 @@ Then add short notes outside the table:
    Abstraction owner: service payload builder, because all callers share the same update contract.
    Repeated patch check: no duplicate call-site guards needed after the shared fix.
    Generator/template impact: N/A, not generated code.
+   Impact scope: local service helper; downstream API handler covered.
+   Closeout level: L1 in chogori model; current repo has equivalent focused test only.
    Test level: service helper RED plus API handler regression.
    Test plan: RED `testZeroValueSkip`; Regression `testNonZeroUpdateStillWorks`; Coverage target 100% branch coverage for zero/non-zero payload selection via `pnpm vitest run ... --coverage`; Browser Regression N/A: API-only payload formatting; GREEN after map/select update.
+   Full gate policy: no local full gate; wait for pre-push/provider CI after batch push. Exception: run repo-required full gate for L3/L4, governance, security, permission, audit, data-scope, or user-requested checks.
+   Compatibility exception: N/A, repo has focused tests and PR checks. If missing, name the missing standard, substitute evidence, and residual risk.
    Planned reply: Fixed in `{hash}` after PR checks pass.
 ```
 
 Then ask the user: **"Do you agree with this plan? Any changes needed?"**
 
 - After user confirms: execute Phase 4 (TDD Fix Cycle) for each approved fix
-  item. This approval permits edits and verification only; it does **not**
-  permit staging, committing, pushing, replying, or resolving.
+  item, then create the per-review commits, push the completed batch, wait for
+  PR checks, reply/resolve the old approved threads when the pushed head is
+  green, and only then re-fetch review inventory for new threads/findings.
+  Continue directly from GREEN verification into the per-review commit batch.
 - **Batch by default after approval**: keep each real bug, style fix, coverage
   fix, or TODO/doc change in its own commit, but do not push, reply, or resolve
   between findings. Push the completed local commit batch once in Phase 4.5,
   then wait for PR checks once on the resulting head SHA.
-- Reply and resolve all approved findings together in Phase 5 only after the
-  batch head is green. False-positive, already-fixed, and deferred/no-code
+- Reply and resolve all approved old findings together in Phase 5 only after
+  the batch head is green. False-positive, already-fixed, and deferred/no-code
   findings still wait for the same final reply/resolve pass when there are code
-  changes in the batch.
+  changes in the batch. New findings discovered after that pass require a fresh
+  inventory delta and decision table.
 - Use a per-finding push/check loop only when the user explicitly asks for it,
   when the batch is too risky to review coherently, or when an urgent isolated
   hotfix must be landed before continuing.
@@ -701,14 +751,14 @@ pnpm vitest run path/to/__tests__/
 | UI bug has only unit RED but no browser RED | Follow `wf-ui-browser-verification` for Browser RED before fixing, or stop and ask the user to approve a substitute evidence standard. |
 | Fix breaks other tests | Fix the regression before proceeding. All tests must pass. |
 
-## Phase 4.4: Commit Confirmation Gate (MANDATORY)
+## Phase 4.4: Per-Review Commit Plan (MANDATORY)
 
 After all approved TDD cycles are GREEN and before running any `git add` or
-`git commit`, output a compact commit plan and wait for explicit user approval.
-The Phase 3.5 decision approval is stale for commits; committing requires this
-separate gate.
+`git commit`, prepare a compact commit plan that maps review items to commits.
+This plan is the grouping rule for execution; it is **not** a separate approval
+gate. Once the grouping is clear, stage and commit automatically.
 
-This gate applies to every commit created during review triage, including:
+This plan applies to every commit created during review triage, including:
 
 - Real bug/style fixes.
 - Coverage-only commits for false positives or proof-first checks.
@@ -725,20 +775,16 @@ Commit plan:
 | 2 | #3 Preserve root employee id | PRRT_yyy | b.ts, b.test.ts | fix(auth): preserve contractor employee root fields |
 ```
 
-Then ask: **"Approve these commits and messages?"**
-
 Hard gates:
 
-- Do not stage or commit until the user approves the commit plan.
-- If the user changes grouping or messages, follow the revised plan exactly.
+- Do not stage or commit until the per-review grouping and messages are clear.
 - If files for multiple review items overlap, use partial staging, temporary
   patch extraction, or another non-destructive method to keep commits grouped by
   review item. If clean separation is not practical, stop and ask the user to
   approve the exception before committing.
 - A broad "fix all review comments" commit is forbidden unless the user
   explicitly approves that exact grouping after seeing the commit plan.
-- A follow-up CI repair commit must be grouped by the independent CI root cause
-  and must also pass this confirmation gate before committing.
+- A follow-up CI repair commit must be grouped by the independent CI root cause.
 - The commit plan must show one commit per deduped review item by default. If
   two independent review items would be grouped, stop and ask the user to
   approve that exact exception.
@@ -770,7 +816,7 @@ Invalid grouping:
 - Mixing a false-positive coverage-only item with a real bug fix.
 - Mixing CI repair with an unrelated review fix.
 
-After the commit plan is approved, create the commits exactly as approved:
+After preparing the commit plan, create the commits exactly as planned:
 
 ```bash
 git add <test_file> <source_file>
@@ -798,12 +844,42 @@ configuration, do not reply or resolve yet. First finish all approved local
 review-item commits, then push the batch once, wait for PR checks on the
 current head SHA, and handle failures.
 
+### Local full-gate policy
+
+Do not use `check:all`, workflow completion, branch-wide coverage, or equivalent
+full gates as the default local proof for PR review triage. The default local
+proof is:
+
+1. RED/GREEN focused test for each real bug or coverage-first finding.
+2. Owner suite for the touched abstraction.
+3. Browser/user-boundary proof when the reviewed behavior is visible UI.
+4. Cheap hygiene checks such as `git diff --check` when applicable.
+5. Pre-push hooks and provider PR checks after the batched push.
+
+Run local full gates only when one of these is true:
+
+- the user explicitly requests them;
+- the repository's rules mark the current batch as L3/L4, phase/feature exit,
+  pre-PR, pre-merge, or governance closeout;
+- the batch changes workflow gates, CI, checkers, coverage policy, OpenSpec
+  traceability, hooks, or AGENTS-style repo policy;
+- the batch touches security, permission, audit, data-scope, protected data,
+  or LLM boundary code and the focused/owner/provider evidence is not enough;
+- provider CI is unavailable and the repository's local full gate is the only
+  remaining substitute proof.
+
+If you skip a repo-declared hard gate, record the exact allowance. "It was slow"
+is not enough. Valid allowances are user approval, an explicit repo/skill
+deduplication rule, or already-run pre-push/provider checks that cover the same
+gate. Otherwise stop and ask.
+
 The default is: **one commit per review item/finding, one push per approved
 batch, one PR checks wait per pushed head SHA**. This keeps rollback and audit
 history clean without paying the full PR checks latency for every review
 finding.
 
-1. Confirm the Phase 4.4 commit plan was approved by the user.
+1. Confirm the Phase 4.4 per-review commit plan exists and matches the
+   approved decision-table items.
 2. Confirm every approved fix/deferred/test-only item has its own local commit
    grouped by review item, or that the user explicitly approved a documented
    exception.
@@ -816,10 +892,12 @@ finding.
    Enter the CI failure triage loop below.
 8. Only continue to Phase 5 when all required PR checks for the current head SHA
    are successful.
-9. **Re-run Phase 1 Step 2 (review bodies) immediately after checks pass.** Bot
-   reviewers trigger on every new commit and can post new P1/P2 review bodies
-   after the push. Do NOT proceed to Phase 5 reply/resolve until the fresh
-   inventory confirms zero new findings.
+9. **Do not re-fetch new review inventory before replying/resolving the old
+   approved threads.** The old batch has already been inventoried, classified,
+   approved, fixed/deferred/dismissed, and validated by green checks. Reply and
+   resolve those old threads first in Phase 5; then run the post-resolve
+   inventory in Phase 5.5 to discover any new bot review bodies or inline
+   threads created for the pushed head.
 
 ### CI failure triage loop
 
@@ -901,10 +979,11 @@ both.
 
 For any triage run that pushed code/docs/config changes, Phase 5 is allowed
 only after Phase 4.5 confirms PR checks are green on the final pushed head SHA.
-Reply and resolve the full approved batch together. Review replies should
-mention the original review-item commit hash and RED→GREEN test name; if a
-later CI-repair commit changed the same behavior, mention that repair commit as
-well. The final report should mention the check result and final head SHA.
+Reply and resolve the full old approved batch together before checking for new
+threads. Review replies should mention the original review-item commit hash and
+RED→GREEN test name; if a later CI-repair commit changed the same behavior,
+mention that repair commit as well. The final report should mention the check
+result and final head SHA.
 
 ```bash
 # Step 1: Reply to the review comment (using REST API)
@@ -940,10 +1019,21 @@ for item in "${ITEMS[@]}"; do
 done
 ```
 
-## Phase 5.5: Final Cross-Check
+## Phase 5.5: Post-Resolve Re-fetch & Final Cross-Check
 
-Before reporting completion, verify there are no unresolved review threads with
-two independent views:
+After Phase 5 replies/resolves the old approved threads, re-run Phase 1 against
+the pushed head to discover new review output from bot reruns:
+
+1. Re-fetch review bodies with P1/P2 findings.
+2. Re-fetch unresolved inline threads with complete pagination.
+3. Re-check PR-level comments/actions-only items when applicable.
+
+If the post-resolve inventory contains new findings, output an inventory delta
+and return to Phase 2/3.5 for fresh approval before fixing, replying, resolving,
+or reporting completion.
+
+Before reporting completion, also verify there are no unresolved review threads
+with two independent views:
 
 1. CLI GraphQL with `reviewThreads(first: 100)` and `reviewThreads(last: 100)`,
    merged by `id`.
@@ -969,6 +1059,18 @@ PR #{number} review triage complete:
 - All resolved: Y/N
 ```
 
+Then include a detailed table. Do not replace this table with a short prose
+summary when there were code changes, test-only coverage commits,
+false-positive evidence, or deferred items.
+
+| Commit / Topic | GitHub Review Location | Actual Change Location @ HEAD | Regression Test Location | Review Problem | Fix Strategy | Result | Standard / Actual / Exception |
+| -------------- | ---------------------- | ----------------------------- | ------------------------ | -------------- | ------------ | ------ | ----------------------------- |
+| `{hash}` / `{topic}` | `{thread/comment/path:line/url}` | `{path:line or N/A}` | `{test path:line / case / summary}` | `{what reviewer claimed}` | `{owner-layer fix or false-positive evidence}` | `{local checks, pre-push, PR checks, reply/resolve}` | `Expected: {Lx + coverage target}; Actual: {evidence}; Exception: {N/A or fallback reason + residual risk}` |
+
+The report must make every compatibility fallback visible. If a repository lacks
+chogori-style L0-L4, coverage, pre-push, or provider CI, keep the same table and
+write `unavailable` plus the substitute proof. Do not omit the column.
+
 ## Red Flags
 
 | Wrong approach | Correct approach |
@@ -979,11 +1081,11 @@ PR #{number} review triage complete:
 | Resolve without replying | Always reply before resolving — provides audit trail for reviewers |
 | Use PR-level review comment for inline thread | Reply to the inline comment and resolve its `threadId` |
 | Check only `reviewThreads(first: 100)` | Check `first + last`, and connector full listing when available |
-| Fetch review bodies only once at the start | Re-run Step 2 (review bodies) after every push — bot reviewers re-run on new commits |
+| Fetch review bodies only once at the start | After green checks, reply/resolve the old approved threads first, then re-run Step 2 (review bodies) — bot reviewers re-run on new commits |
 | Declare inventory empty based on inline threads only | Review body P1/P2 is mandatory input; if it wasn't checked against the latest commit, the inventory is incomplete |
 | Write long explanations | Keep replies to 1-2 lines with evidence |
 | Execute fixes/resolves without user approval | Always output decision table and wait for confirmation |
-| Stage or commit after plan approval without a separate commit confirmation | After GREEN verification, show a commit plan with grouping and messages, then wait for explicit commit approval |
+| Stage a blob commit after plan approval | After GREEN verification, prepare the per-review commit plan, then automatically create one commit per review item by default |
 | Put multiple independent review findings into one broad commit | Create one commit per review item/finding; duplicate threads for the same deduped finding may share one commit |
 | Claim overlapping files force a blob commit | Use partial staging or patch extraction; if clean separation is impractical, stop and ask the user to approve the exception |
 | Act on a user-pasted single review item without full PR inventory | Treat pasted comments as hints; rerun Phase 1 and map them into a complete decision table |
@@ -1007,10 +1109,12 @@ PR #{number} review triage complete:
 | Skip coverage assessment for the reviewed code path | Record current coverage, target 95%+ for affected paths, and 100% for critical branches, or document the tooling limitation and substitute evidence. |
 | Treat PR-level coverage as enough when a critical path is untested | Add targeted tests for the reviewed critical path; broad suite coverage cannot hide an uncovered data-loss/auth/submit/destructive/navigation/upload branch. |
 | Treat browser regression as optional for visible UI changes | Add Browser Regression to the plan, or explicitly record why component/unit coverage proves the visible contract. |
+| Treat a weaker repo as permission to ignore chogori-style standards | Classify against the target model first, then record a controlled compatibility exception with substitute evidence and residual risk. |
+| Skip a repo-declared hard gate because it is slow | Stop unless user approval, explicit deduplication, or equivalent pre-push/provider proof covers the same gate. |
 | Report fix as done without showing RED→GREEN | Every fix reply must reference the test name and confirm RED→GREEN cycle. |
 | Squash independent review fixes into one convenience commit | Commit each deduped review item separately by default, then push the completed batch once. |
-| Push and wait PR checks after every finding by default | Commit each approved review item separately after commit confirmation, push the approved batch once, then wait once on the batch head SHA. |
-| Reply/resolve immediately after push | Wait for PR checks on the pushed head SHA; fix failures before replying/resolving the batch. |
+| Push and wait PR checks after every finding by default | Commit each approved review item separately from the per-review commit plan, push the approved batch once, then wait once on the batch head SHA. |
+| Reply/resolve immediately after push | Wait for PR checks on the pushed head SHA; fix failures before replying/resolving the old approved batch, then re-fetch for new findings after resolving old threads. |
 | Fix multiple CI failures in one blob commit | Group failures by root cause; commit each independent CI repair separately, then push the repair batch once. |
 | Treat external CI failures as code regressions | Use logs/annotations to prove the cause; rerun or report a blocker when it is external, such as exhausted Actions minutes. |
 | Put long evidence in decision-table cells | Keep the table compact; move evidence, test plan, and planned replies into per-item notes below it. |
