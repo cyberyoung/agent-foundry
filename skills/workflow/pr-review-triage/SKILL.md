@@ -30,6 +30,12 @@ These gates exist because real PR triage runs failed without them:
   loop reports completion, blocks, or the user switches tasks. If the same chat
   later invokes this skill again, start in normal confirmation mode unless the
   user gives fresh autonomous authorization.
+- **Existing regression baseline is mandatory before RED or fixes.** Before
+  adding a new failing test or editing production code, run the existing owner
+  regression tests, record the GREEN count, judge whether their quality covers
+  the affected owner path and adjacent modes, and show that verdict in the
+  decision table. If the baseline is missing or weak, add old-GREEN
+  characterization/regression coverage first.
 - **Push preflight is mandatory before every remote update.** Before `git push`,
   inspect the remote branch, ahead commits, and diff scope. Stop for user
   confirmation if the push would create/recreate a remote branch or the diff
@@ -55,7 +61,7 @@ when the phase says a reference is required.
 | --- | --- | --- |
 | Inventory | `references/inventory.md` | Before classifying, fixing, replying, or resolving anything. |
 | Verification | `references/verification.md` | While deciding verdict, owner layer, coverage, API/OAS, UI/browser, or false-positive status. |
-| TDD + commits | `references/tdd-and-commit.md` | Before writing production code, staging, or committing. |
+| TDD + commits | `references/tdd-and-commit.md` | Before presenting the decision table, writing production code, staging, or committing. |
 | Push + CI | `references/push-checks-and-ci.md` | Before push; whenever checks fail, do not appear, or CI/coverage/workflow logic changed. |
 | Reply + report | `references/reply-resolve-report.md` | After PR checks are green and before resolving or reporting completion. |
 
@@ -63,16 +69,18 @@ when the phase says a reference is required.
 
 1. Fetch inventory. REQUIRED: `references/inventory.md`.
 2. Classify and verify every deduped item. REQUIRED: `references/verification.md`.
-3. Present a decision table and wait, unless explicit autonomous approval is
+3. Before the decision table, run the existing owner regression baseline or
+   record why it is unavailable; include GREEN count and quality verdict.
+4. Present a decision table and wait, unless explicit autonomous approval is
    active for this invocation.
-4. TDD fix each real issue. REQUIRED: `references/tdd-and-commit.md`.
-5. Commit each review item separately by default.
-6. Run push preflight, push, and wait for current-head PR checks. REQUIRED:
+5. TDD fix each real issue. REQUIRED: `references/tdd-and-commit.md`.
+6. Commit each review item separately by default.
+7. Run push preflight, push, and wait for current-head PR checks. REQUIRED:
    `references/push-checks-and-ci.md`.
-7. Reply and resolve old approved threads only after checks are green.
-8. Wait the stabilization window and re-fetch inventory. REQUIRED:
+8. Reply and resolve old approved threads only after checks are green.
+9. Wait the stabilization window and re-fetch inventory. REQUIRED:
    `references/reply-resolve-report.md`.
-9. Repeat if new findings appear; otherwise report with evidence table.
+10. Repeat if new findings appear; otherwise report with evidence table.
 
 ## Inventory Completeness Gate
 

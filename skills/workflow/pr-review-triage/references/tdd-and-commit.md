@@ -2,6 +2,32 @@
 
 REQUIRED after a finding is approved or explicitly covered by autonomous mode and before editing, staging, or committing.
 
+## Phase 3.4: Existing Regression Baseline Gate (MANDATORY)
+
+Before writing a new RED test, editing production code, staging, committing,
+pushing, replying, or resolving, run and evaluate the existing regression suite
+for the owner layer touched by the review item.
+
+Required evidence per review item:
+
+- Existing regression command(s).
+- GREEN result with exact test count, such as `32 passed` or `4 tests`.
+- Quality judgment:
+  - owner layer covered or missing;
+  - affected entry path covered or missing;
+  - adjacent modes covered or missing;
+  - fallback, legacy, or negative behavior covered or missing.
+- Decision:
+  - `Sufficient`: proceed to the new RED test;
+  - `Insufficient`: add old-GREEN characterization/regression tests first;
+  - `Unavailable`: stop, explain the blocker, or use a clean temporary
+    worktree if the current worktree is already contaminated.
+
+Hard rule: a new RED test does not replace existing regression baseline proof.
+Do not edit production code until the original regression baseline is GREEN and
+quality-sufficient, or the missing old-GREEN regression coverage has been added
+and proven GREEN first.
+
 ## Phase 3.5: Confirmation Gate (MANDATORY)
 
 **After verification, do NOT execute any fixes or resolves on your own.** You must first output a decision table and wait for user approval.
@@ -53,12 +79,12 @@ text and a concise Chinese translation in the per-item notes below the table.
 Do not add these as wide table columns.
 
 ```
-| # | File | Level | Verdict | Closeout | Impact Scope | Regression Coverage | Action | Thread(s) |
-|---|------|-------|---------|----------|--------------|---------------------|--------|-----------|
-| 1 | service/foo.go:42 | P2 | Real bug | L1/local | request payload owner; no generated code | current gap; target 100% branch | TDD fix + checks | PRRT_xxx |
-| 2 | handler/bar.go:95 | P2 | False positive | L0/no code | handler only | existing test proves contract | Reply + resolve | PRRT_yyy |
-| 3 | scripts/x.sh:12 | P2 | Deferred | L4/governance | shared CI helper | TODO, no code change | TODO + resolve | review body |
-| 4 | service/baz.go:88 | P2 | Needs proof | L2/shared | shared hook + consumers | coverage-first test required | Coverage-first test | PRRT_zzz |
+| # | File | Level | Verdict | Closeout | Impact Scope | Existing Regression Baseline | Regression Plan | Action | Thread(s) |
+|---|------|-------|---------|----------|--------------|------------------------------|-----------------|--------|-----------|
+| 1 | service/foo.go:42 | P2 | Real bug | L1/local | request payload owner; no generated code | GREEN 42/42; owner path sufficient | RED plus 100% branch regression | TDD fix + checks | PRRT_xxx |
+| 2 | handler/bar.go:95 | P2 | False positive | L0/no code | handler only | GREEN 18/18; contract already covered | No new code; cite existing proof | Reply + resolve | PRRT_yyy |
+| 3 | scripts/x.sh:12 | P2 | Deferred | L4/governance | shared CI helper | N/A no executable change | TODO, no code change | TODO + resolve | review body |
+| 4 | service/baz.go:88 | P2 | Needs proof | L2/shared | shared hook + consumers | Missing/weak; add old-GREEN characterization first | Coverage-first test required | Coverage-first test | PRRT_zzz |
 ```
 
 Then add short notes outside the table:
@@ -74,6 +100,7 @@ Then add short notes outside the table:
    Impact scope: local service helper; downstream API handler covered.
    Closeout level: L1 in chogori model; current repo has equivalent focused test only.
    Test level: service helper RED plus API handler regression.
+   Existing regression baseline: command `pnpm test ./service`; result GREEN 42/42; quality sufficient because owner helper path, API handler path, and non-zero update regression are covered before any new RED test.
    Test plan: RED `testZeroValueSkip`; Regression `testNonZeroUpdateStillWorks`; Coverage target 100% branch coverage for zero/non-zero payload selection via `pnpm vitest run ... --coverage`; Browser Regression N/A: API-only payload formatting; GREEN after map/select update.
    Full gate policy: no local full gate; wait for pre-push/provider CI after batch push. Exception: run repo-required full gate for L3/L4, governance, security, permission, audit, data-scope, or user-requested checks.
    Compatibility exception: N/A, repo has focused tests and PR checks. If missing, name the missing standard, substitute evidence, and residual risk.
@@ -119,10 +146,13 @@ Write fix before test? DELETE IT. Start over.
 Write a test that reproduces the exact bug identified in the review finding.
 
 - The test MUST target the specific issue: wrong behavior, missing edge case, type violation, etc.
-- This RED test is not automatically sufficient regression coverage. Before
-  editing production code, also list the necessary regression tests from Phase
-  3b.5.1. Add them before or immediately after the minimal fix, and run them in
-  the GREEN verification.
+- This RED test is not automatically sufficient regression coverage and does
+  not replace Phase 3.4. Before writing this RED test, the existing regression
+  baseline must already be GREEN and quality-sufficient, or missing old-GREEN
+  characterization coverage must have been added. Before editing production
+  code, also list the necessary regression tests from Phase 3b.5.1. Add them
+  before or immediately after the minimal fix, and run them in the GREEN
+  verification.
 - For user-visible fixes, include Browser Regression in the approved plan:
   Browser RED when proving the UI bug and Browser GREEN when proving adjacent
   visible behavior still works. If browser coverage is not needed, record the
@@ -199,6 +229,7 @@ pnpm vitest run path/to/__tests__/
 
 | If | Then |
 |----|------|
+| Existing regression baseline missing before RED/fix | STOP. Run owner regressions, record GREEN count and quality, or add old-GREEN characterization first. |
 | Fix code written before test | STOP. Delete fix code. Write test first. |
 | Test passes on first run (before fix) | Test is wrong — it didn't catch the bug. Rewrite it. |
 | Multiple bugs fixed in one cycle | STOP. One test per bug. Separate cycles. |
