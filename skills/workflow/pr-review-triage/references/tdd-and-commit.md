@@ -195,7 +195,7 @@ Before asking for approval, shared/lower-level owner changes must save the
 decision package as a markdown artifact and run the lightweight checker:
 
 ```bash
-node <skill-dir>/../scripts/check-decision-package.mjs --mode pr-review --changed-files <comma-separated-changed-files> <decision-package.md>
+node <skill-dir>/scripts/check-decision-package.mjs --mode pr-review --changed-files <comma-separated-changed-files> <decision-package.md>
 ```
 
 For non-shared changes, run the checker whenever a decision-package artifact
@@ -231,7 +231,7 @@ owner regression coverage. Record the result:
 | C | 01900000-0000-4000-8000-000000000003 | 0 | evidence/subagent-c.json | RP group owner coverage, caller-only masking, first action checked |
 
 ## Local/CI Gate Design
-Command: `node scripts/check-decision-package.mjs --mode pr-review --changed-files src/api/request.tsx docs/plans/example.md`
+Command: `node <skill-dir>/scripts/check-decision-package.mjs --mode pr-review --changed-files src/api/request.tsx docs/plans/example.md`
 Detector: `git diff --name-only HEAD` supplies changed files to `--changed-files`; replace with a repo-wired detector path when available.
 Gate: fail when a shared owner path lacks owner-level matrix/regression coverage; record fallback and residual risk if not wired.
 ```

@@ -85,7 +85,7 @@ Before asking for approval, shared/lower-level owner changes must save the
 decision package as a markdown artifact and run the lightweight checker:
 
 ```bash
-node <skill-dir>/../scripts/check-decision-package.mjs --mode bugfix --changed-files <comma-separated-changed-files> <decision-package.md>
+node <skill-dir>/scripts/check-decision-package.mjs --mode bugfix --changed-files <comma-separated-changed-files> <decision-package.md>
 ```
 
 For non-shared changes, run the checker whenever a decision-package artifact
@@ -121,7 +121,7 @@ explicit fallback, not a general promise:
 
 1. Save bugfix decision packages as markdown artifacts when shared owners are in
    scope.
-2. Run `scripts/check-decision-package.mjs` locally before approval with
+2. Run `<skill-dir>/scripts/check-decision-package.mjs` locally before approval with
    changed-file input, and wire the same command into the repo task/workflow
    gate when those artifacts exist. Missing changed-file input fails closed by
    default.
@@ -431,7 +431,7 @@ For shared/lower-level owner changes, save the decision package to a markdown
 artifact and run:
 
 ```bash
-node <skill-dir>/../scripts/check-decision-package.mjs --mode bugfix --changed-files <comma-separated-changed-files> <decision-package.md>
+node <skill-dir>/scripts/check-decision-package.mjs --mode bugfix --changed-files <comma-separated-changed-files> <decision-package.md>
 ```
 
 For non-shared changes, run the checker whenever an artifact exists. If the
@@ -454,7 +454,7 @@ Use this review block for shared-owner changes:
 | C | 01900000-0000-4000-8000-000000000003 | 0 | evidence/subagent-c.json | RP group owner coverage, caller-only masking, first action checked |
 
 ## Local/CI Gate Design
-Command: `node scripts/check-decision-package.mjs --mode bugfix --changed-files src/api/request.tsx docs/plans/example.md`
+Command: `node <skill-dir>/scripts/check-decision-package.mjs --mode bugfix --changed-files src/api/request.tsx docs/plans/example.md`
 Detector: `git diff --name-only HEAD` supplies changed files to `--changed-files`; replace with a repo-wired detector path when available.
 Gate: fail when a shared owner path lacks owner-level matrix/regression coverage; record fallback and residual risk if not wired.
 ```

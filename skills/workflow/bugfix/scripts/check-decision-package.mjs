@@ -977,7 +977,7 @@ Shared request wrapper needs owner-level regression planning.
 | C | 019ccc33-3333-4333-8333-333333333333 | 0 | evidence/019ccc33-3333-4333-8333-333333333333.json | RP-1A owner rows, caller-only gaps, first code action verified |
 
 ## Local/CI Gate Design
-Command: \`node scripts/check-decision-package.mjs --mode bugfix --require-changed-files --changed-files src/api/request.tsx docs/plans/password.md\`.
+Command: \`node <skill-dir>/scripts/check-decision-package.mjs --mode bugfix --changed-files src/api/request.tsx docs/plans/password.md\`.
 Detector: \`git diff --name-only HEAD\` supplies changed files for Owner/RP matrix checks.
 Gate: fail when changed-files names a shared owner with no Owner/RP matrix row, missing coverage, or caller-level-only regression.
 

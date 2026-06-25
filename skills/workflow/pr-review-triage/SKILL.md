@@ -75,7 +75,7 @@ when the phase says a reference is required.
 | Inventory | `references/inventory.md` | Before classifying, fixing, replying, or resolving anything. |
 | Verification | `references/verification.md` | While deciding verdict, owner layer, coverage, API/OAS, UI/browser, or false-positive status. |
 | TDD + commits | `references/tdd-and-commit.md` | Before presenting the decision package, writing production code, staging, or committing. |
-| Decision package check | `scripts/check-decision-package.mjs` | Before asking for approval. Shared/lower-level owner changes must save a markdown decision package and run it; if the checker is absent in a repo copy, say so and do the same checks manually. |
+| Decision package check | `<skill-dir>/scripts/check-decision-package.mjs` | Before asking for approval. Shared/lower-level owner changes must save a markdown decision package and run it; if the checker is absent in a repo copy, say so and do the same checks manually. |
 | Push + CI | `references/push-checks-and-ci.md` | Before push; whenever checks fail, do not appear, or CI/coverage/workflow logic changed. |
 | Reply + report | `references/reply-resolve-report.md` | After PR checks are green and before resolving or reporting completion. |
 
@@ -89,7 +89,7 @@ when the phase says a reference is required.
    3.5 decision package format and approval gate.
 5. For shared/lower-level owner changes, save the decision package as a markdown
    artifact and run
-   `node <skill-dir>/../scripts/check-decision-package.mjs --mode pr-review --changed-files <comma-separated-changed-files> <artifact>`
+   `node <skill-dir>/scripts/check-decision-package.mjs --mode pr-review --changed-files <comma-separated-changed-files> <artifact>`
    before approval. Shared/lower-level owner changes must provide the branch or
    staged changed-file list. The checker also falls back to git diff and fails
    closed when no changed-file source is available; use
@@ -170,7 +170,7 @@ Before asking for approval, shared/lower-level owner changes must save the
 decision package as a markdown artifact and run the lightweight checker:
 
 ```bash
-node <skill-dir>/../scripts/check-decision-package.mjs --mode pr-review --changed-files <comma-separated-changed-files> <decision-package.md>
+node <skill-dir>/scripts/check-decision-package.mjs --mode pr-review --changed-files <comma-separated-changed-files> <decision-package.md>
 ```
 
 For non-shared changes, run the checker whenever a decision-package artifact
@@ -204,7 +204,7 @@ mechanically hard to miss, not merely promise a future improvement:
 
 1. Require decision packages to be saved as markdown artifacts for PR triage
    work that changes shared owners.
-2. Run `scripts/check-decision-package.mjs` locally before approval with
+2. Run `<skill-dir>/scripts/check-decision-package.mjs` locally before approval with
    changed-file input, and wire the same command into the repo's task/workflow
    gate when such artifacts are present. Missing changed-file input fails closed
    by default.
