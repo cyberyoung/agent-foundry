@@ -4,6 +4,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
+const DECISION_PACKAGE_GATE_CONTRACT_VERSION = '2026-06-shared-owner-rp-v1'
+
 const USAGE = `
 Usage:
   node check-decision-package.mjs [--mode pr-review|bugfix] [--no-require-changed-files] [--changed-files a.ts,b.ts] <decision-package.md>
@@ -40,6 +42,12 @@ const SUBAGENT_ID_RE =
   /019[0-9a-f]{5}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
 
 const args = process.argv.slice(2)
+
+if (args.includes('--version')) {
+  console.log(DECISION_PACKAGE_GATE_CONTRACT_VERSION)
+  process.exit(0)
+}
+
 const modeIndex = args.indexOf('--mode')
 const mode = modeIndex === -1 ? 'generic' : args[modeIndex + 1]
 const positionalArgs = args.filter((_, index) =>
@@ -669,9 +677,11 @@ function hasReviewEvidenceFile(evidence, source, evidenceBaseDir) {
 
 function hasLocalCiGateDesign(text) {
   const hasCommand =
-    /\bCommand:\s*`?(node|pnpm|npm|yarn|bun)\b(?=.*\bcheck-decision-package\b)(?=.*--changed-files)(?!.*--no-require-changed-files)/i.test(text)
+    /\bCommand:\s*`?(node|pnpm|npm|yarn|bun)\b(?=.*\bcheck-decision-package\b)(?=.*--changed-files)(?!.*--no-require-changed-files)/i.test(text) ||
+      /\b(Repo-local durable gate|Skill-local fallback|Package check):\s*`?(node|pnpm|npm|yarn|bun)\b(?=.*\b(check-decision-package|check-shared-owner-regression-gate|check:decision-package)\b)(?=.*(--changed-files|--package|check:decision-package))(?!.*--no-require-changed-files)/i.test(text)
   const hasDetectorOrGate =
-    hasConcreteDetector(text)
+    hasConcreteDetector(text) ||
+      /\bRepo integration:\s*.*\b(check:task|pre-push|CI|workflow|hook)\b/i.test(text)
   const hasFailureRule =
     /\b(fail|fails|failure|block|gate|拒绝|阻断|失败)\b/i.test(text) &&
       /\b(shared owner|owner\/rp|matrix|coverage status|caller-level|changed-files|底层|共享)\b/i.test(text)
@@ -809,7 +819,17 @@ function isLikelySharedOwner(owner) {
 }
 
 function isSharedOwnerPath(file) {
+  if (isDocumentPath(file)) return false
+  if (isTestFilePath(file)) return false
   return /(^|\/)(api\/request|src\/api\/request|hooks?|components?|utils?|helpers?|scripts?|workflow|templates?|generator|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b/i.test(file)
+}
+
+function isDocumentPath(file) {
+  return /^(docs|openspec)\//i.test(file)
+}
+
+function isTestFilePath(file) {
+  return /(^|\/)__tests__\/|\.test\.|\.spec\./i.test(file)
 }
 
 function isLocalPagePath(value) {

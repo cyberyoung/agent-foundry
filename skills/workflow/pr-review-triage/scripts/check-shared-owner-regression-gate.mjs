@@ -5,6 +5,8 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
+const DECISION_PACKAGE_GATE_CONTRACT_VERSION = '2026-06-shared-owner-rp-v1'
+
 const USAGE = `
 Usage:
   node check-shared-owner-regression-gate.mjs --mode bugfix|pr-review --package <decision-package.md> [--changed-files a.ts,b.ts]
@@ -20,6 +22,11 @@ const SHARED_FILE_RE =
   /(^|\/)(api\/request|src\/api\/request|hooks?|components?|utils?|helpers?|scripts?|workflow|templates?|generator|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b/i
 
 const args = process.argv.slice(2)
+
+if (args.includes('--version')) {
+  console.log(DECISION_PACKAGE_GATE_CONTRACT_VERSION)
+  process.exit(0)
+}
 
 if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
   console.log(USAGE.trim())
@@ -150,7 +157,17 @@ function detectGitChangedFiles() {
 }
 
 function isSharedOwnerPath(file) {
+  if (isDocumentPath(file)) return false
+  if (isTestFilePath(file)) return false
   return SHARED_FILE_RE.test(file)
+}
+
+function isDocumentPath(file) {
+  return /^(docs|openspec)\//i.test(file)
+}
+
+function isTestFilePath(file) {
+  return /(^|\/)__tests__\/|\.test\.|\.spec\./i.test(file)
 }
 
 function getOption(name) {

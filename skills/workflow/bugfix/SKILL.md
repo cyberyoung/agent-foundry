@@ -82,7 +82,14 @@ Required blocks:
 - `Local/CI Gate Design` for shared/lower-level owner changes
 
 Before asking for approval, shared/lower-level owner changes must save the
-decision package as a markdown artifact and run the lightweight checker:
+decision package as a markdown artifact. First look for a repo-local durable
+gate, then use the skill-local checker only as fallback:
+
+1. If the repo has `scripts/ci/check-shared-owner-regression-gate.mjs`, a
+   package script, or another documented equivalent, run the repo-local gate.
+   It is the only form that can count as CI/local durable enforcement.
+2. If no repo-local gate exists, run the skill-local checker below and report:
+   `No repo-local durable decision-package gate found; ran skill-local fallback only, so CI will not enforce this rule yet.`
 
 ```bash
 node <skill-dir>/scripts/check-decision-package.mjs --mode bugfix --changed-files <comma-separated-changed-files> <decision-package.md>
@@ -121,32 +128,36 @@ explicit fallback, not a general promise:
 
 1. Save bugfix decision packages as markdown artifacts when shared owners are in
    scope.
-2. Run `<skill-dir>/scripts/check-decision-package.mjs` locally before approval
-   for the specific decision package.
-3. Wire `<skill-dir>/scripts/check-shared-owner-regression-gate.mjs` into the
-   repo task/workflow gate, pre-push hook, or CI job. This wrapper is the actual
-   local/CI gate: it detects changed shared owner files, fails when no decision
-   package is supplied, and invokes the package checker with the detected
-   changed files.
-4. Add or configure a repo-specific changed-file source for the wrapper when the
-   default git detector is not enough. The default detector covers tracked,
-   staged, and untracked files; explicit `--changed-files` or
-   `DECISION_PACKAGE_CHANGED_FILES` may be used by CI.
-5. Fail the gate when a changed shared owner has no Owner/RP Coverage Matrix
+2. Discover repo-local enforcement before using skill-local fallback. Check for
+   repo scripts/package entries such as
+   `scripts/ci/check-shared-owner-regression-gate.mjs`,
+   `check:decision-package`, `check:task`, hook, or workflow integration.
+3. If a repo-local gate exists, verify its contract with `--version` when
+   available. If the version is absent, stale, or unclear, run a negative/positive
+   smoke test before counting it as durable coverage.
+4. If no repo-local gate exists, run the skill-local fallback checker and state
+   the missing durable gate explicitly. Do not describe skill-local fallback as
+   implemented CI/local enforcement.
+5. When durable enforcement is in scope, vendor or adapt the checker into the
+   repo and wire the repo-local script into `check:task`, hook, workflow, or an
+   equivalent gate. The repo owns enforcement; the skill owns the reusable
+   contract/template.
+6. Fail the gate when a changed shared owner has no Owner/RP Coverage Matrix
    row, has missing, blank, partial, caller-only, or otherwise invalid
    `Coverage Status`, or only has caller-level regression rows.
-6. Permit `N/A` only with a reason and owner-level substitute evidence.
-7. If the repo cannot wire the gate in the same fix, record the fallback command,
+7. Permit `N/A` only with a reason and owner-level substitute evidence.
+8. If the repo cannot wire the gate in the same fix, record the fallback command,
    missing integration point, and residual risk in `Local/CI Gate Design`; do
    not present that fallback as implemented CI coverage.
 
 Evidence levels:
 
-- `Implemented local/CI gate`: `check-shared-owner-regression-gate.mjs` or a
-  repo wrapper around it is wired into `check:task`, hook, workflow, or
-  equivalent gate.
+- `Implemented local/CI gate`: a repo-local
+  `check-shared-owner-regression-gate.mjs` or equivalent repo wrapper is wired
+  into `check:task`, hook, workflow, or equivalent gate and its contract version
+  or behavior smoke test has been verified.
 - `Local checker only`: the decision package passed the checker, but the repo
-  has no durable gate yet; record fallback and residual risk.
+  has no durable gate yet; record fallback, warning, and residual risk.
 - `Manual substitute`: checker or changed-file input is unavailable; stop for
   explicit user approval and keep the manual checklist in the package.
 
@@ -459,10 +470,12 @@ Use this review block for shared-owner changes:
 | C | 01900000-0000-4000-8000-000000000003 | 0 | evidence/subagent-c.json | RP group owner coverage, caller-only masking, first action checked |
 
 ## Local/CI Gate Design
-Package check: `node <skill-dir>/scripts/check-decision-package.mjs --mode bugfix --changed-files src/api/request.tsx docs/plans/example.md`
-Gate command: `node <skill-dir>/scripts/check-shared-owner-regression-gate.mjs --mode bugfix --package docs/plans/example.md`
-Detector: gate wrapper uses git tracked/staged/untracked files by default; CI may pass `--changed-files` or `DECISION_PACKAGE_CHANGED_FILES`.
+Contract version: `2026-06-shared-owner-rp-v1`
+Repo-local durable gate: `pnpm check:decision-package -- --mode bugfix --package docs/plans/example.md` (or `N/A: no repo-local gate found`)
+Repo integration: `check:task` / pre-push / CI workflow path that calls the repo-local gate, or `N/A` with residual risk.
+Skill-local fallback: `node <skill-dir>/scripts/check-shared-owner-regression-gate.mjs --mode bugfix --changed-files src/api/request.tsx --package docs/plans/example.md`
 Gate: fail when a shared owner path changed but no package exists, no package passes, or the package lacks owner-level matrix/regression coverage.
+Fallback warning: if repo-local durable gate is absent, state that CI will not enforce this rule yet.
 ```
 
 If any Regression Plan row is `Add old-GREEN`, the first approved code action

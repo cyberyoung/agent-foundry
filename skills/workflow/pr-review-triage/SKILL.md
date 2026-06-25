@@ -167,7 +167,14 @@ The decision package is a structured artifact, not prose. It must contain:
 - `Local/CI Gate Design` for shared/lower-level owner changes
 
 Before asking for approval, shared/lower-level owner changes must save the
-decision package as a markdown artifact and run the lightweight checker:
+decision package as a markdown artifact. First look for repo-local durable
+enforcement, then use the skill-local checker only as fallback:
+
+1. If the repo has `scripts/ci/check-shared-owner-regression-gate.mjs`, a
+   package script, or another documented equivalent, run the repo-local gate.
+   It is the only form that can count as CI/local durable enforcement.
+2. If no repo-local gate exists, run the skill-local checker below and report:
+   `No repo-local durable decision-package gate found; ran skill-local fallback only, so CI will not enforce this rule yet.`
 
 ```bash
 node <skill-dir>/scripts/check-decision-package.mjs --mode pr-review --changed-files <comma-separated-changed-files> <decision-package.md>
@@ -204,32 +211,36 @@ mechanically hard to miss, not merely promise a future improvement:
 
 1. Require decision packages to be saved as markdown artifacts for PR triage
    work that changes shared owners.
-2. Run `<skill-dir>/scripts/check-decision-package.mjs` locally before approval
-   for the specific decision package.
-3. Wire `<skill-dir>/scripts/check-shared-owner-regression-gate.mjs` into the
-   repo's task/workflow gate, pre-push hook, or CI job. This wrapper is the
-   actual local/CI gate: it detects changed shared owner files, fails when no
-   decision package is supplied, and invokes the package checker with the
-   detected changed files.
-4. Add or configure a repo-specific changed-file source for the wrapper when
-   the default git detector is not enough. The default detector covers tracked,
-   staged, and untracked files; explicit `--changed-files` or
-   `DECISION_PACKAGE_CHANGED_FILES` may be used by CI.
-5. Fail the local/CI gate if a flagged owner has no matrix row, has missing,
+2. Discover repo-local enforcement before using skill-local fallback. Check for
+   repo scripts/package entries such as
+   `scripts/ci/check-shared-owner-regression-gate.mjs`,
+   `check:decision-package`, `check:task`, hook, or workflow integration.
+3. If a repo-local gate exists, verify its contract with `--version` when
+   available. If the version is absent, stale, or unclear, run a negative/positive
+   smoke test before counting it as durable coverage.
+4. If no repo-local gate exists, run the skill-local fallback checker and state
+   the missing durable gate explicitly. Do not describe skill-local fallback as
+   implemented CI/local enforcement.
+5. When durable enforcement is in scope, vendor or adapt the checker into the
+   repo and wire the repo-local script into `check:task`, hook, workflow, or an
+   equivalent gate. The repo owns enforcement; the skill owns the reusable
+   contract/template.
+6. Fail the local/CI gate if a flagged owner has no matrix row, has missing,
    blank, partial, caller-only, or otherwise invalid `Coverage Status`, or only
    has caller-level Regression Plan rows.
-6. Allow explicit `N/A` only with a reason and owner-level substitute evidence.
-7. If the repo cannot wire the gate in the same PR, record the fallback command,
+7. Allow explicit `N/A` only with a reason and owner-level substitute evidence.
+8. If the repo cannot wire the gate in the same PR, record the fallback command,
    the missing integration point, and the explicit residual risk in
    `Local/CI Gate Design`; do not describe that as implemented CI coverage.
 
 Evidence levels:
 
-- `Implemented local/CI gate`: `check-shared-owner-regression-gate.mjs` or a
-  repo wrapper around it is wired into `check:task`, hook, workflow, or
-  equivalent gate.
+- `Implemented local/CI gate`: a repo-local
+  `check-shared-owner-regression-gate.mjs` or equivalent repo wrapper is wired
+  into `check:task`, hook, workflow, or equivalent gate and its contract version
+  or behavior smoke test has been verified.
 - `Local checker only`: the decision package passed the checker, but the repo
-  has no durable gate yet; record fallback and residual risk.
+  has no durable gate yet; record fallback, warning, and residual risk.
 - `Manual substitute`: checker or changed-file input is unavailable; stop for
   explicit user approval and keep the manual checklist in the package.
 
