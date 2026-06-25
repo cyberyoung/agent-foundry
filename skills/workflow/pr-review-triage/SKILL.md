@@ -204,25 +204,30 @@ mechanically hard to miss, not merely promise a future improvement:
 
 1. Require decision packages to be saved as markdown artifacts for PR triage
    work that changes shared owners.
-2. Run `<skill-dir>/scripts/check-decision-package.mjs` locally before approval with
-   changed-file input, and wire the same command into the repo's task/workflow
-   gate when such artifacts are present. Missing changed-file input fails closed
-   by default.
-3. Add a repo-specific changed-file detector that flags shared owner paths
-   (`api/request*`, shared hooks/components, generators, scripts, workflow
-   gates, public helpers) and requires a matching Owner/RP Coverage Matrix row.
-4. Fail the local/CI gate if a flagged owner has no matrix row, has missing,
+2. Run `<skill-dir>/scripts/check-decision-package.mjs` locally before approval
+   for the specific decision package.
+3. Wire `<skill-dir>/scripts/check-shared-owner-regression-gate.mjs` into the
+   repo's task/workflow gate, pre-push hook, or CI job. This wrapper is the
+   actual local/CI gate: it detects changed shared owner files, fails when no
+   decision package is supplied, and invokes the package checker with the
+   detected changed files.
+4. Add or configure a repo-specific changed-file source for the wrapper when
+   the default git detector is not enough. The default detector covers tracked,
+   staged, and untracked files; explicit `--changed-files` or
+   `DECISION_PACKAGE_CHANGED_FILES` may be used by CI.
+5. Fail the local/CI gate if a flagged owner has no matrix row, has missing,
    blank, partial, caller-only, or otherwise invalid `Coverage Status`, or only
    has caller-level Regression Plan rows.
-5. Allow explicit `N/A` only with a reason and owner-level substitute evidence.
-6. If the repo cannot wire the gate in the same PR, record the fallback command,
+6. Allow explicit `N/A` only with a reason and owner-level substitute evidence.
+7. If the repo cannot wire the gate in the same PR, record the fallback command,
    the missing integration point, and the explicit residual risk in
    `Local/CI Gate Design`; do not describe that as implemented CI coverage.
 
 Evidence levels:
 
-- `Implemented local/CI gate`: detector command exists in the repo and is wired
-  into `check:task`, hook, workflow, or equivalent gate.
+- `Implemented local/CI gate`: `check-shared-owner-regression-gate.mjs` or a
+  repo wrapper around it is wired into `check:task`, hook, workflow, or
+  equivalent gate.
 - `Local checker only`: the decision package passed the checker, but the repo
   has no durable gate yet; record fallback and residual risk.
 - `Manual substitute`: checker or changed-file input is unavailable; stop for

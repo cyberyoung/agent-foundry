@@ -2,7 +2,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 
 const USAGE = `
 Usage:
@@ -871,19 +871,20 @@ function getChangedFiles(args) {
 
 function detectGitChangedFiles() {
   try {
-    const output = execSync(
-      'git diff --name-only HEAD && git diff --name-only --cached HEAD',
-      {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      },
-    )
-    const untracked = execSync('git ls-files --others --exclude-standard', {
+    const tracked = execFileSync('git', ['diff', '--name-only', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    const staged = execFileSync('git', ['diff', '--name-only', '--cached', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    const untracked = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     })
     return unique(
-      `${output}\n${untracked}`
+      `${tracked}\n${staged}\n${untracked}`
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean),

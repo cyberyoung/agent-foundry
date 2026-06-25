@@ -121,25 +121,30 @@ explicit fallback, not a general promise:
 
 1. Save bugfix decision packages as markdown artifacts when shared owners are in
    scope.
-2. Run `<skill-dir>/scripts/check-decision-package.mjs` locally before approval with
-   changed-file input, and wire the same command into the repo task/workflow
-   gate when those artifacts exist. Missing changed-file input fails closed by
-   default.
-3. Add a repo-specific changed-file detector for shared owner paths, such as
-   request wrappers, shared hooks/components, generators, scripts, workflow
-   gates, and public helpers.
-4. Fail the gate when a changed shared owner has no Owner/RP Coverage Matrix
+2. Run `<skill-dir>/scripts/check-decision-package.mjs` locally before approval
+   for the specific decision package.
+3. Wire `<skill-dir>/scripts/check-shared-owner-regression-gate.mjs` into the
+   repo task/workflow gate, pre-push hook, or CI job. This wrapper is the actual
+   local/CI gate: it detects changed shared owner files, fails when no decision
+   package is supplied, and invokes the package checker with the detected
+   changed files.
+4. Add or configure a repo-specific changed-file source for the wrapper when the
+   default git detector is not enough. The default detector covers tracked,
+   staged, and untracked files; explicit `--changed-files` or
+   `DECISION_PACKAGE_CHANGED_FILES` may be used by CI.
+5. Fail the gate when a changed shared owner has no Owner/RP Coverage Matrix
    row, has missing, blank, partial, caller-only, or otherwise invalid
    `Coverage Status`, or only has caller-level regression rows.
-5. Permit `N/A` only with a reason and owner-level substitute evidence.
-6. If the repo cannot wire the gate in the same fix, record the fallback command,
+6. Permit `N/A` only with a reason and owner-level substitute evidence.
+7. If the repo cannot wire the gate in the same fix, record the fallback command,
    missing integration point, and residual risk in `Local/CI Gate Design`; do
    not present that fallback as implemented CI coverage.
 
 Evidence levels:
 
-- `Implemented local/CI gate`: detector command exists in the repo and is wired
-  into `check:task`, hook, workflow, or equivalent gate.
+- `Implemented local/CI gate`: `check-shared-owner-regression-gate.mjs` or a
+  repo wrapper around it is wired into `check:task`, hook, workflow, or
+  equivalent gate.
 - `Local checker only`: the decision package passed the checker, but the repo
   has no durable gate yet; record fallback and residual risk.
 - `Manual substitute`: checker or changed-file input is unavailable; stop for
@@ -454,9 +459,10 @@ Use this review block for shared-owner changes:
 | C | 01900000-0000-4000-8000-000000000003 | 0 | evidence/subagent-c.json | RP group owner coverage, caller-only masking, first action checked |
 
 ## Local/CI Gate Design
-Command: `node <skill-dir>/scripts/check-decision-package.mjs --mode bugfix --changed-files src/api/request.tsx docs/plans/example.md`
-Detector: `git diff --name-only HEAD` supplies changed files to `--changed-files`; replace with a repo-wired detector path when available.
-Gate: fail when a shared owner path lacks owner-level matrix/regression coverage; record fallback and residual risk if not wired.
+Package check: `node <skill-dir>/scripts/check-decision-package.mjs --mode bugfix --changed-files src/api/request.tsx docs/plans/example.md`
+Gate command: `node <skill-dir>/scripts/check-shared-owner-regression-gate.mjs --mode bugfix --package docs/plans/example.md`
+Detector: gate wrapper uses git tracked/staged/untracked files by default; CI may pass `--changed-files` or `DECISION_PACKAGE_CHANGED_FILES`.
+Gate: fail when a shared owner path changed but no package exists, no package passes, or the package lacks owner-level matrix/regression coverage.
 ```
 
 If any Regression Plan row is `Add old-GREEN`, the first approved code action

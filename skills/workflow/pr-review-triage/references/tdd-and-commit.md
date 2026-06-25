@@ -231,9 +231,10 @@ owner regression coverage. Record the result:
 | C | 01900000-0000-4000-8000-000000000003 | 0 | evidence/subagent-c.json | RP group owner coverage, caller-only masking, first action checked |
 
 ## Local/CI Gate Design
-Command: `node <skill-dir>/scripts/check-decision-package.mjs --mode pr-review --changed-files src/api/request.tsx docs/plans/example.md`
-Detector: `git diff --name-only HEAD` supplies changed files to `--changed-files`; replace with a repo-wired detector path when available.
-Gate: fail when a shared owner path lacks owner-level matrix/regression coverage; record fallback and residual risk if not wired.
+Package check: `node <skill-dir>/scripts/check-decision-package.mjs --mode pr-review --changed-files src/api/request.tsx docs/plans/example.md`
+Gate command: `node <skill-dir>/scripts/check-shared-owner-regression-gate.mjs --mode pr-review --package docs/plans/example.md`
+Detector: gate wrapper uses git tracked/staged/untracked files by default; CI may pass `--changed-files` or `DECISION_PACKAGE_CHANGED_FILES`.
+Gate: fail when a shared owner path changed but no package exists, no package passes, or the package lacks owner-level matrix/regression coverage.
 ```
 
 ### 5. TDD / Commit / Reply Plan
