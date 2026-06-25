@@ -167,7 +167,7 @@ write `unavailable` plus the substitute proof. Do not omit the column.
 | Reply/resolve immediately after push | Wait for PR checks on the pushed head SHA; fix failures before replying/resolving the old approved batch, then re-fetch for new findings after resolving old threads. |
 | Fix multiple CI failures in one blob commit | Group failures by root cause; commit each independent CI repair separately, then push the repair batch once. |
 | Treat external CI failures as code regressions | Use logs/annotations to prove the cause; rerun or report a blocker when it is external, such as exhausted Actions minutes. |
-| Put long evidence in decision-table cells | Keep the table compact; move evidence, test plan, and planned replies into per-item notes below it. |
+| Put long evidence in decision-table cells | Keep the Decision Table compact; move evidence, regression details, and planned replies into the Evidence & Ownership, Regression Plan, and TDD / Commit / Reply Plan tables. |
 | Push without inspecting remote branch / ahead commits / diff scope | Run push preflight first; stop if the push would create/recreate a branch or exceed approved scope. |
 | Treat absent PR checks as success | Verify current head has provider checks; if no suite appears, diagnose and safely retrigger instead of resolving. |
 | Use broad allow-missing env vars for full hooks | Prefer real `SYNC_TARGET_*` paths; broad env vars can leak into nested tests and change test semantics. |
