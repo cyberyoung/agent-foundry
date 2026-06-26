@@ -44,11 +44,23 @@ These gates exist because real PR triage runs failed without them:
   three report zero missing owner regression coverage, and record the reviewer
   result in the decision package. If subagents are unavailable, stop and request
   explicit user approval for the manual substitute.
+- **Shared-level classification is mandatory before deciding gates.** Do not
+  flatten all "shared" paths into one bucket. Classify the changed surface as
+  repo-wide/lower-level shared, page/domain-local shared, or page-local before
+  writing the Fix Strategy or Regression Plan. Page/domain-local shared
+  components still require owner-level regression for their domain and entry
+  matrix; they simply do not trigger the repo-wide shared-owner gate unless the
+  fix changes a repo-wide/lower-level owner.
 - **Weak baseline changes the first code action.** When the decision package says
   the existing baseline is `Insufficient`, the first approved code change must
   be an old-GREEN characterization/regression test that passes on current code.
   A review-finding RED test before that old-GREEN proof is a gate violation,
   even if the RED would correctly reproduce the bug.
+- **Baseline verdict and first code action are mechanical fields.** Every
+  Decision Table row must include `Baseline Verdict` and `First Code Action`.
+  The only valid mapping is `Sufficient -> RED`,
+  `Insufficient -> Add old-GREEN`, and `Unavailable -> STOP`. Any mismatch is
+  invalid, even if the prose elsewhere sounds correct.
 - **Push preflight is mandatory before every remote update.** Before `git push`,
   inspect the remote branch, ahead commits, and diff scope. Stop for user
   confirmation if the push would create/recreate a remote branch or the diff
@@ -161,6 +173,8 @@ The decision package is a structured artifact, not prose. It must contain:
 - `Inventory Summary`
 - `Owner/RP Coverage Matrix`
 - `Evidence & Ownership`
+- `Shared-Level Classification` when a changed path or owner can be mistaken
+  across repo-wide, page/domain-local, and page-local boundaries
 - `Regression Plan`
 - `TDD / Commit / Reply Plan`
 - `3-Reviewer Regression Plan Review` for shared/lower-level owner changes
@@ -187,7 +201,10 @@ checker is a floor, not the whole review: it catches missing structure,
 invalid or missing `Coverage Status`, shared owners named in `Fix Strategy` or
 detected from `--changed-files` but absent from the matrix, and Regression Plan
 rows that only promise `preserve`/`保留` without `Existing GREEN`, `Add
-old-GREEN`, `RED`, `Post-fix GREEN`, or `N/A`. For shared owners, it also
+old-GREEN`, `RED`, `Post-fix GREEN`, or `N/A`. It also checks that
+`Baseline Verdict` and `First Code Action` obey `Sufficient -> RED`,
+`Insufficient -> Add old-GREEN`, and `Unavailable -> STOP`. For shared owners,
+it also
 requires owner-level Regression Plan rows, three reviewer rows with distinct
 real subagent/session ids and `Missing Owner Count=0`, plus `Local/CI Gate
 Design` containing a concrete command, detector/gate/hook, and failure rule.
@@ -203,6 +220,22 @@ owner-level regression coverage, whether caller-only coverage is hiding an owner
 gap, and whether the first code action is correct when old-GREEN coverage is
 missing. Record a `3-Reviewer Regression Plan Review` table and do not proceed
 until the missing-owner count is zero for all three reviews.
+
+### Shared-Level Classification
+
+Before applying the shared-owner gate, explicitly classify the changed surface.
+This prevents two opposite mistakes: treating domain-local shared code as
+"not shared", or promoting it to repo-wide/lower-level ownership.
+
+| Change surface | Shared level | Regression Plan owner | Repo-wide shared-owner gate |
+| --- | --- | --- | --- |
+| `src/components/*`, request wrappers, public hooks/helpers, workflow scripts, generators/templates | repo-wide / lower-level shared | repo-wide owner contract plus representative callers | yes |
+| `src/pages/*/components/*`, domain-scoped hooks/helpers, page-domain modules reused inside one business area | page/domain-local shared | domain/component owner plus affected page entry matrix and browser proof when visible | no, unless the fix also changes a repo-wide owner |
+| single leaf page component or one-off caller code | page-local | current page entry and bug-target regression | no |
+
+The decision package must not use `N/A` to mean "domain-local shared code needs
+no regression." `N/A` may only apply to the repo-wide gate, with the domain
+owner regression plan still listed separately when that code is changed.
 
 ### Local/CI Gate Design
 
@@ -225,7 +258,7 @@ mechanically hard to miss, not merely promise a future improvement:
    repo and wire the repo-local script into `check:task`, hook, workflow, or an
    equivalent gate. The repo owns enforcement; the skill owns the reusable
    contract/template.
-6. Fail the local/CI gate if a flagged owner has no matrix row, has missing,
+6. Fail the local/CI gate if a flagged repo-wide/lower-level owner has no matrix row, has missing,
    blank, partial, caller-only, or otherwise invalid `Coverage Status`, or only
    has caller-level Regression Plan rows.
 7. Allow explicit `N/A` only with a reason and owner-level substitute evidence.

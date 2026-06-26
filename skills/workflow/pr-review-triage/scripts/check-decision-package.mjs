@@ -15,6 +15,7 @@ Checks a markdown decision package for:
   - Decision Table
   - Problem / Root Cause / Timeline or Inventory Summary
   - Evidence & Ownership
+  - Shared-Level Classification for shared/lower-level owner packages
   - Owner/RP Coverage Matrix
   - shared owners named in Fix Strategy also appearing in the matrix
   - no Coverage Status=missing rows
@@ -38,6 +39,15 @@ const ASPIRATIONAL_RE =
   /\b(todo|tbd|later|planned|plan to|will|should|expected|intend|pending|未执行|待执行|计划|应该|将会|稍后)\b/i
 const VALID_COVERAGE_STATUS_RE =
   /^(covered|owner-covered|owner covered|n\/a|not applicable)$/i
+const VALID_BASELINE_VERDICT_RE =
+  /^(Sufficient|Insufficient|Unavailable)$/i
+const VALID_FIRST_CODE_ACTION_RE =
+  /^(RED|Add old-GREEN|STOP)$/i
+const FIRST_CODE_ACTION_BY_BASELINE_VERDICT = {
+  sufficient: 'RED',
+  insufficient: 'Add old-GREEN',
+  unavailable: 'STOP',
+}
 const SUBAGENT_ID_RE =
   /019[0-9a-f]{5}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
 
@@ -94,6 +104,7 @@ function checkDecisionPackage(markdown, mode = 'generic', options = {}) {
   const normalized = markdown.replace(/\r\n/g, '\n')
   const sections = parseSections(normalized)
   let regressionDataRows = []
+  let decisionFirstActionRows = []
 
   if (!VALID_MODES.has(mode)) {
     messages.push(
@@ -122,6 +133,7 @@ function checkDecisionPackage(markdown, mode = 'generic', options = {}) {
     /(3|three).*review|subagent.*review/i,
   )
   const localCiSection = findSection(sections, /local\/ci gate design/i)
+  const sharedLevelSection = findSection(sections, /shared[-/ ]level classification/i)
   const matrixRows = matrixSection
     ? parseMatrixRows(extractFirstTableRows(matrixSection.body))
     : []
@@ -135,6 +147,10 @@ function checkDecisionPackage(markdown, mode = 'generic', options = {}) {
       .filter(isLikelySharedOwner),
     ...changedSharedFiles,
   ])
+
+  if (decisionSection) {
+    decisionFirstActionRows = extractDecisionFirstActionRows(decisionSection.body)
+  }
 
   if (!decisionSection) {
     messages.push('FAIL: missing Decision Table section.')
@@ -168,7 +184,11 @@ function checkDecisionPackage(markdown, mode = 'generic', options = {}) {
     messages.push(
       'FAIL: TDD / Verification / Commit Plan must include an execution table with Sequence and Checks columns.',
     )
-  } else if (mode === 'bugfix' && !hasBugfixTddTargets(tddSection.body)) {
+  } else if (
+    mode === 'bugfix' &&
+    requiresBugRed(decisionFirstActionRows) &&
+    !hasBugfixTddTargets(tddSection.body)
+  ) {
     messages.push(
       'FAIL: bugfix TDD plan must include target test file and target test command.',
     )
@@ -180,6 +200,8 @@ function checkDecisionPackage(markdown, mode = 'generic', options = {}) {
       'fix strategy',
       'regression plan',
       'evidence/owner',
+      'baseline verdict',
+      'first code action',
       'action',
     ]) {
       if (!decisionColumns.includes(requiredColumn)) {
@@ -189,11 +211,33 @@ function checkDecisionPackage(markdown, mode = 'generic', options = {}) {
       }
     }
 
-    for (const row of extractFirstTableRows(decisionSection.body).slice(1)) {
-      const header = decisionColumns
-      const actionIndex = header.indexOf('action')
+    for (const decisionRow of decisionFirstActionRows) {
+      const { row, baselineVerdict, firstCodeAction } = decisionRow
+      const actionIndex = decisionColumns.indexOf('action')
       if (actionIndex !== -1 && !normalizeCell(row[actionIndex] || '')) {
         messages.push(`FAIL: Decision Table row has empty Action cell: ${row.join(' | ')}`)
+      }
+
+      if (!VALID_BASELINE_VERDICT_RE.test(baselineVerdict)) {
+        messages.push(
+          `FAIL: Decision Table Baseline Verdict must be Sufficient, Insufficient, or Unavailable: ${row.join(' | ')}`,
+        )
+        continue
+      }
+
+      if (!VALID_FIRST_CODE_ACTION_RE.test(firstCodeAction)) {
+        messages.push(
+          `FAIL: Decision Table First Code Action must be RED, Add old-GREEN, or STOP: ${row.join(' | ')}`,
+        )
+        continue
+      }
+
+      const expectedAction =
+        FIRST_CODE_ACTION_BY_BASELINE_VERDICT[baselineVerdict.toLowerCase()]
+      if (normalizeCell(firstCodeAction).toLowerCase() !== expectedAction.toLowerCase()) {
+        messages.push(
+          `FAIL: Baseline Verdict=${baselineVerdict} requires First Code Action=${expectedAction}, not ${firstCodeAction}: ${row.join(' | ')}`,
+        )
       }
     }
   }
@@ -269,9 +313,19 @@ function checkDecisionPackage(markdown, mode = 'generic', options = {}) {
 
     if (
       mode === 'bugfix' &&
+      requiresBugRed(decisionFirstActionRows) &&
       !regressionDataRows.some((row) => /^RED$/i.test(row.action))
     ) {
       messages.push('FAIL: bugfix Regression Plan must include a bug RED action row.')
+    }
+
+    if (
+      decisionFirstActionRows.some((row) => /^Add old-GREEN$/i.test(row.firstCodeAction)) &&
+      !regressionDataRows.some((row) => /^Add old-GREEN$/i.test(row.action))
+    ) {
+      messages.push(
+        'FAIL: First Code Action=Add old-GREEN requires an Add old-GREEN Regression Plan row.',
+      )
     }
 
     for (const row of regressionDataRows) {
@@ -330,6 +384,12 @@ function checkDecisionPackage(markdown, mode = 'generic', options = {}) {
   }
 
   if (sharedOrLowerLevelOwners.length > 0) {
+    if (!sharedLevelSection) {
+      messages.push(
+        'FAIL: shared/lower-level owner decision package must include Shared-Level Classification so repo-wide, page/domain-local, and page-local ownership are not conflated.',
+      )
+    }
+
     if (changedFiles.length === 0) {
       messages.push(
         'FAIL: shared/lower-level owner packages must run checker with --changed-files or detectable git changed files so shared paths cannot be hidden by wording.',
@@ -550,6 +610,11 @@ function rowMentionsOwner(row, owner) {
 
 function extractRegressionActionRows(text) {
   const actionTables = extractTables(text).filter((table) => {
+    const headerText = table[0].join(' ').toLowerCase()
+    if (/rp group/.test(headerText) && /coverage status/.test(headerText)) {
+      return false
+    }
+
     const tableText = table.flat().join(' ')
     return (
       /regression action/i.test(tableText) ||
@@ -711,6 +776,32 @@ function getFirstTableHeader(text) {
   return rows.length === 0
     ? []
     : rows[0].map((cell) => cell.toLowerCase())
+}
+
+function extractDecisionFirstActionRows(decisionBody) {
+  const rows = extractFirstTableRows(decisionBody)
+  if (rows.length < 2) return []
+
+  const header = rows[0].map((cell) => cell.toLowerCase())
+  const baselineIndex = header.indexOf('baseline verdict')
+  const firstActionIndex = header.indexOf('first code action')
+
+  return rows.slice(1).map((row) => ({
+    row,
+    baselineVerdict: normalizeCell(
+      baselineIndex === -1 ? '' : row[baselineIndex] || '',
+    ),
+    firstCodeAction: normalizeCell(
+      firstActionIndex === -1 ? '' : row[firstActionIndex] || '',
+    ),
+  }))
+}
+
+function requiresBugRed(decisionFirstActionRows) {
+  if (decisionFirstActionRows.length === 0) return true
+  return decisionFirstActionRows.some(
+    (row) => !/^STOP$/i.test(row.firstCodeAction),
+  )
 }
 
 function hasTddPlanTable(text) {
@@ -970,14 +1061,19 @@ function runSelfTest() {
 Shared request wrapper needs owner-level regression planning.
 
 ## Decision Table
-| # | Review Item | Verdict | Fix Strategy | Regression Plan | Evidence/Owner | Action |
-|---|---|---|---|---|---|---|
-| 1 | temp auth | Real bug | change shared request wrapper \`get/post\` | RP-1 | EO-1 | TDD-1 |
+| # | Review Item | Verdict | Fix Strategy | Regression Plan | Evidence/Owner | Baseline Verdict | First Code Action | Action |
+|---|---|---|---|---|---|---|---|---|
+| 1 | temp auth | Real bug | change shared request wrapper \`get/post\` | RP-1 | EO-1 | Sufficient | RED | TDD-1 |
 
 ## Evidence & Ownership
 | Ref | Evidence | Owner Layer |
 |---|---|---|
 | EO-1 | reachable | request wrapper |
+
+## Shared-Level Classification
+| Path / Surface | Shared Level | Gate Classification | Regression Owner |
+|---|---|---|---|
+| src/api/request.tsx | repo-wide / lower-level shared | repo-wide shared-owner gate | request wrapper owner tests |
 
 ## Regression Plan
 ### Owner/RP Coverage Matrix

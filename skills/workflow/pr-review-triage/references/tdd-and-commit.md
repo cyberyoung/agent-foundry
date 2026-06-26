@@ -111,11 +111,17 @@ the owner-layer implementation approach, not the tests. If the table does not
 make the proposed fix understandable without reading the regression plan, the
 table is incomplete.
 
+Every row must include `Baseline Verdict` and `First Code Action`. The first
+code action is mechanically derived from the baseline verdict:
+`Sufficient -> RED`, `Insufficient -> Add old-GREEN`, and
+`Unavailable -> STOP`. If these disagree, the decision package is invalid.
+
 ```
-| # | Review Item | Verdict | Fix Strategy | Regression Plan | Evidence/Owner | Action |
-|---|-------------|---------|--------------|-----------------|----------------|--------|
-| 1 | zero-value clear | P2 Real bug | build explicit update map in payload owner | RP-1 | EO-1 | TDD-1 |
-| 2 | payload path | P2 False positive | no code; hook already maps field to payload | RP-2 | EO-2 | Reply only |
+| # | Review Item | Verdict | Fix Strategy | Regression Plan | Evidence/Owner | Baseline Verdict | First Code Action | Action |
+|---|-------------|---------|--------------|-----------------|----------------|------------------|-------------------|--------|
+| 1 | zero-value clear | P2 Real bug | build explicit update map in payload owner | RP-1 | EO-1 | Sufficient | RED | TDD-1 |
+| 2 | weak baseline | P2 Real bug | add modal lifecycle guard in page owner | RP-2 | EO-2 | Insufficient | Add old-GREEN | TDD-2 |
+| 3 | payload path | P2 False positive | no code; hook already maps field to payload | RP-3 | EO-3 | Unavailable | STOP | Reply only |
 ```
 
 ### 3. Evidence & Ownership Table
@@ -138,9 +144,27 @@ Required Evidence/Ownership fields:
 - review comment original text and Chinese translation;
 - concrete evidence for the verdict;
 - abstraction owner and why lower-level call-site patches are not enough;
+- shared-level classification when the path or owner can be confused across
+  repo-wide, page/domain-local, and page-local boundaries;
 - repeated patch check / blast radius;
 - generator/template impact, or `N/A`;
 - closeout level / compatibility exception when relevant.
+
+When a review item involves shared-looking paths such as `components`, `hooks`,
+`helpers`, scripts, generators, or domain-scoped modules, add a
+`Shared-Level Classification` table under the matching `EO-*` reference:
+
+```
+| Path / Surface | Shared Level | Gate Classification | Regression Owner |
+|---|---|---|---|
+| src/components/* | repo-wide / lower-level shared | repo-wide shared-owner gate | repo-wide component contract + representative callers |
+| src/pages/*/components/* | page/domain-local shared | domain owner, not repo-wide gate | domain/component owner + affected page entry matrix |
+| leaf page component | page-local | no repo-wide gate | page entry + bug-target regression |
+```
+
+Do not equate "not repo-wide" with "not shared." Page/domain-local shared
+components still need owner-level regression for their domain. They only avoid
+the repo-wide shared-owner gate.
 
 ### 4. Regression Plan Table
 
@@ -168,6 +192,18 @@ strategy changes a shared/lower-level API, create a separate `RP-*` group for
 that owner before caller-level regressions. A decision package that changes a
 request wrapper, shared hook, generator, script, or component contract but only
 lists caller-level tests is incomplete.
+
+Shared-level classification controls the regression owner:
+
+| Shared Level | Required Regression Plan | Repo-Wide Gate |
+|---|---|---|
+| repo-wide/lower-level shared | owner contract, representative callers, compatibility, generator/template impact when applicable | required |
+| page/domain-local shared | domain/component owner-level tests, affected entry matrix, browser proof when visible | not required unless the fix also changes repo-wide owner |
+| page-local | current page entry and bug target | not required |
+
+`N/A` may be used for the repo-wide gate only with a reason. It is invalid to
+mark page/domain-local shared code as `N/A` for regression; the domain/component
+owner plan must still be explicit.
 
 Allowed `Regression Action` values:
 
@@ -203,10 +239,13 @@ exists. If the checker is not available in the current repo/skill installation,
 say so and manually perform the same checks. The checker is a structural floor:
 it requires a Decision Table, Owner/RP Coverage Matrix, shared owners from
 `Fix Strategy` or `--changed-files` represented in the matrix, no invalid or
-missing `Coverage Status`, and Regression Plan rows with explicit `Existing
-GREEN`, `Add old-GREEN`, `RED`, `Post-fix GREEN`, or `N/A` actions rather than
-only `preserve`/`保留` wording. For shared owners, the Regression Plan action
-table must include an owner-level signal, such as
+missing `Coverage Status`, Decision Table rows with `Baseline Verdict` and
+`First Code Action` obeying `Sufficient -> RED`,
+`Insufficient -> Add old-GREEN`, `Unavailable -> STOP`, and Regression Plan
+rows with explicit `Existing GREEN`, `Add old-GREEN`, `RED`,
+`Post-fix GREEN`, or `N/A` actions rather than only `preserve`/`保留` wording.
+For repo-wide/lower-level shared owners, the
+Regression Plan action table must include an owner-level signal, such as
 `Regression Scope=owner-level` or an `Owner / Surface` cell that matches the
 matrix owner. The checker also requires three distinct real subagent/session
 review sources and a `Local/CI Gate Design` with command, detector/gate/hook,
@@ -214,7 +253,7 @@ and failure rule. The `Evidence` cell must be a file path, relative to the
 decision package, containing the actual subagent completion notification for the
 matching `agent_path` with `no blockers`.
 
-If `Fix Strategy` changes a shared/lower-level owner, run three independent
+If `Fix Strategy` changes a repo-wide/lower-level shared owner, run three independent
 fresh reviews of the Owner/RP Coverage Matrix and Regression Plan before asking
 for approval. Reviewers must check whether every shared owner named in
 `Fix Strategy` has owner-level regression coverage, whether caller-only tests
