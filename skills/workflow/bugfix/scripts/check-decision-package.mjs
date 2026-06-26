@@ -366,7 +366,12 @@ function checkDecisionPackage(markdown, mode = 'generic', options = {}) {
         continue
       }
 
-      if (!isLikelySharedOwner(matrixRow.owner)) {
+      const requiresOwnerLevel = isLikelySharedOwner(matrixRow.owner) ||
+        changedSharedFiles.some((changedFile) =>
+          rowMentionsChangedPath(matrixRow.owner, changedFile),
+        )
+
+      if (!requiresOwnerLevel) {
         continue
       }
 
