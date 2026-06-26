@@ -912,7 +912,7 @@ function isLikelySharedOwner(owner) {
 function isSharedOwnerPath(file) {
   if (isDocumentPath(file)) return false
   if (isTestFilePath(file)) return false
-  return /(^|\/)(src\/(App|main)\.tsx|api\/request|src\/api\/request|hooks?|components?|utils?|helpers?|scripts?|workflow|templates?|generator|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b/i.test(file)
+  return /^(?:[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$)|(^|\/)(src\/(App|main)\.tsx|api\/request|src\/api\/request|hooks?|components?|utils?|helpers?|scripts?|workflow|templates?|generator|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b/i.test(file)
 }
 
 function isDocumentPath(file) {
