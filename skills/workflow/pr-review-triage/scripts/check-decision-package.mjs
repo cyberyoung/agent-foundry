@@ -633,7 +633,10 @@ function extractRegressionActionRows(text) {
     const actionIndex = header.findIndex((cell) => /regression action/.test(cell))
     return table.slice(1)
       .filter((row) => row.length > 1)
-      .filter((row) => !row.some((cell) => /regression action/i.test(cell)))
+      .filter((row) =>
+        actionIndex === -1 ||
+          !/^regression action$/i.test(normalizeCell(row[actionIndex] || '')),
+      )
       .map((row) => ({
         cells: row,
         header,
