@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+/* v8 ignore start -- CLI behavior is covered by spawned decision-package gate tests. */
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -19,7 +19,7 @@ skill-local check-decision-package.mjs with the detected changed files.
 `
 
 const SHARED_FILE_RE =
-  /(^|\/)(api\/request|src\/api\/request|hooks?|components?|utils?|helpers?|scripts?|workflow|templates?|generator|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b/i
+  /^(package\.json$|[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$|src\/(App|main)\.tsx$|src\/api\/(request|index\.tsx$)|api\/request|src\/(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|scripts?\/|\.github\/workflows?\/|workflows?\/|templates?\/|generator(\/|$))/i
 
 const args = process.argv.slice(2)
 
@@ -55,31 +55,45 @@ if (packageFiles.length === 0) {
   fail(`shared/lower-level owner files changed but no decision package was provided: ${sharedFiles.join(', ')}`)
 }
 
-let passedPackageCount = 0
 const checkerPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'check-decision-package.mjs')
+const missingPackageResults = []
 
 for (const packageFile of packageFiles) {
   if (!fs.existsSync(packageFile)) {
-    console.log(`FAIL: decision package does not exist: ${packageFile}`)
-    continue
+    missingPackageResults.push({
+      packageFile,
+      output: `FAIL: decision package does not exist: ${packageFile}`,
+    })
   }
+}
 
-  const result = runChecker(checkerPath, packageFile, changedFiles)
-  if (result.ok) {
-    passedPackageCount += 1
-    console.log(`PASS: ${packageFile}`)
-    continue
+const coveredPackageFiles = new Set()
+const uncoveredSharedFiles = sharedFiles.filter((sharedFile) =>
+  !packageFiles.some((packageFile) => {
+    if (!fs.existsSync(packageFile)) return false
+    const result = runChecker(checkerPath, packageFile, [sharedFile])
+    if (result.ok || hasOwnerCoverage(packageFile, sharedFile)) {
+      coveredPackageFiles.add(packageFile)
+      return true
+    }
+    return false
+  }),
+)
+
+if (uncoveredSharedFiles.length === 0) {
+  const coveredCount = coveredPackageFiles.size
+  if (coveredCount === 1) {
+    pass('shared/lower-level owner changes are covered by 1 decision package(s).')
   }
+  pass('shared/lower-level owner changes are covered by decision packages.')
+}
 
-  console.log(`FAIL: ${packageFile}`)
+for (const result of missingPackageResults) {
+  console.log(`FAIL: ${result.packageFile}`)
   console.log(result.output.trim())
 }
 
-if (passedPackageCount === 0) {
-  fail(`shared/lower-level owner files changed but no decision package passed owner regression checks: ${sharedFiles.join(', ')}`)
-}
-
-pass(`shared/lower-level owner changes are covered by ${passedPackageCount} decision package(s).`)
+fail(`shared/lower-level owner files changed but no decision package covered every owner: ${uncoveredSharedFiles.join(', ')}`)
 
 function runChecker(checkerPath, packageFile, changedFiles) {
   try {
@@ -107,6 +121,43 @@ function runChecker(checkerPath, packageFile, changedFiles) {
   }
 }
 
+function hasOwnerCoverage(packageFile, sharedFile) {
+  const markdown = fs.readFileSync(packageFile, 'utf8')
+  const rpGroups = markdown
+    .split('\n')
+    .filter((line) =>
+      /^\s*\|/.test(line) && rowMentionsChangedPath(line, sharedFile),
+    )
+    .flatMap((line) => [...line.matchAll(/\bRP-[A-Za-z0-9_-]+\b/g)])
+    .map((match) => match[0])
+
+  return unique(rpGroups).some((rpGroup) =>
+    markdown
+      .split('\n')
+      .filter((line) => line.includes(rpGroup))
+      .some((line) =>
+        rowMentionsChangedPath(line, sharedFile) &&
+          /\b(Existing GREEN|Add old-GREEN|RED|Post-fix GREEN|N\/A)\b/i.test(line) &&
+          /\b(owner[- ]level|shared owner|owner)\b/i.test(line) &&
+          !/\b(callers?|call site|page[- ]?only|caller[- ]?only|page[- ]?level|only through|调用方|页面级)\b/i.test(line),
+      ),
+  )
+}
+
+function rowMentionsChangedPath(row, file) {
+  const normalizedFile = file.replace(/^.*?src\//, 'src/').toLowerCase()
+  return extractPathTokens(row).includes(normalizedFile)
+}
+
+function extractPathTokens(text) {
+  return text
+    .replace(/`/g, '')
+    .replace(/\\/g, '/')
+    .toLowerCase()
+    .split(/[^a-z0-9_./-]+/)
+    .filter(Boolean)
+}
+
 function getPackageFiles() {
   const directPackages = getOptions('--package')
     .flatMap((value) => splitCsv(value))
@@ -123,7 +174,11 @@ function getPackageFiles() {
       .map((name) => path.join(directory, name))
   })
 
-  return unique([...directPackages, ...discoveredPackages])
+  const changedPackages = changedFiles
+    .filter((file) => /^docs\/plans\/.*\.md$/i.test(file))
+    .map((file) => path.resolve(file))
+
+  return unique([...directPackages, ...discoveredPackages, ...changedPackages])
 }
 
 function getChangedFiles() {
@@ -219,6 +274,15 @@ function runSelfTest() {
   }
   if (!isSharedOwnerPath('src/auth.tsx')) {
     throw new Error('self-test expected src/auth.tsx to be shared')
+  }
+  if (!isSharedOwnerPath('package.json')) {
+    throw new Error('self-test expected package.json to be shared')
+  }
+  if (!isSharedOwnerPath('vite.config.ts')) {
+    throw new Error('self-test expected vite.config.ts to be shared')
+  }
+  if (!isSharedOwnerPath('tsconfig.json')) {
+    throw new Error('self-test expected tsconfig.json to be shared')
   }
   if (isSharedOwnerPath('src/pages/login/LoginModal.tsx')) {
     throw new Error('self-test expected page component to be local')

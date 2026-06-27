@@ -938,7 +938,7 @@ function isLikelySharedOwner(owner) {
 function isSharedOwnerPath(file) {
   if (isDocumentPath(file)) return false
   if (isTestFilePath(file)) return false
-  return /^(package\.json$|[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$|src\/(App|main)\.tsx$|src\/api\/request|api\/request|src\/(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|scripts?\/|\.github\/workflows?\/|workflows?\/|templates?\/|generator(\/|$))/i.test(file)
+  return /^(package\.json$|[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$|src\/(App|main)\.tsx$|src\/api\/(request|index\.tsx$)|api\/request|src\/(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|scripts?\/|\.github\/workflows?\/|workflows?\/|templates?\/|generator(\/|$))/i.test(file)
 }
 
 function isDocumentPath(file) {
