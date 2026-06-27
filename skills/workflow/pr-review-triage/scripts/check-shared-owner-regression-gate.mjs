@@ -57,6 +57,7 @@ if (packageFiles.length === 0) {
 
 const checkerPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'check-decision-package.mjs')
 const missingPackageResults = []
+const invalidClaimResults = []
 
 for (const packageFile of packageFiles) {
   if (!fs.existsSync(packageFile)) {
@@ -72,13 +73,33 @@ const uncoveredSharedFiles = sharedFiles.filter((sharedFile) =>
   !packageFiles.some((packageFile) => {
     if (!fs.existsSync(packageFile)) return false
     const result = runChecker(checkerPath, packageFile, [sharedFile])
-    if (result.ok || hasOwnerCoverage(packageFile, sharedFile)) {
+    if (result.ok) {
       coveredPackageFiles.add(packageFile)
       return true
+    }
+    if (hasOwnerCoverage(packageFile, sharedFile)) {
+      invalidClaimResults.push({
+        packageFile,
+        sharedFile,
+        output: result.output,
+      })
     }
     return false
   }),
 )
+
+if (invalidClaimResults.length > 0) {
+  for (const result of invalidClaimResults) {
+    console.log(`FAIL: ${result.packageFile}`)
+    console.log(`Changed shared owner: ${result.sharedFile}`)
+    console.log(result.output.trim())
+  }
+  fail(
+    `decision package checker failed for packages that claimed shared-owner coverage: ${
+      unique(invalidClaimResults.map((result) => result.packageFile)).join(', ')
+    }`,
+  )
+}
 
 if (uncoveredSharedFiles.length === 0) {
   const coveredCount = coveredPackageFiles.size
