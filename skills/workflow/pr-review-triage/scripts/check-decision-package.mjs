@@ -938,7 +938,7 @@ function isLikelySharedOwner(owner) {
 function isSharedOwnerPath(file) {
   if (isDocumentPath(file)) return false
   if (isTestFilePath(file)) return false
-  return /^(package\.json$|[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$|src\/(App|main)\.tsx$|src\/api\/(request|index\.tsx$)|api\/request|src\/(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|scripts?\/|\.github\/workflows?\/|workflows?\/|templates?\/|generator(\/|$))/i.test(file)
+  return /^(package\.json$|[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$|src\/(App|main)\.tsx$|src\/api\/(request|responseFeedback|index\.tsx$)|api\/request|src\/(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|scripts?\/|\.github\/workflows?\/|workflows?\/|templates?\/|generator(\/|$))/i.test(file)
 }
 
 function isDocumentPath(file) {
@@ -1204,6 +1204,11 @@ Gate: fail when changed-files names a shared owner with no Owner/RP matrix row, 
   const badResult = checkDecisionPackage(bad)
   const mixedOwnerBadResult = checkDecisionPackage(mixedOwnerBad)
   const markdownMissingBadResult = checkDecisionPackage(markdownMissingBad)
+  const responseFeedbackMissingResult = checkDecisionPackage(good, 'bugfix', {
+    changedFiles: ['src/api/responseFeedback.ts'],
+    requireChangedFiles: true,
+    evidenceBaseDir,
+  })
 
   if (!goodResult.ok) {
     throw new Error(`self-test good fixture failed:\n${goodResult.messages.join('\n')}`)
@@ -1219,6 +1224,10 @@ Gate: fail when changed-files names a shared owner with no Owner/RP matrix row, 
 
   if (markdownMissingBadResult.ok) {
     throw new Error('self-test markdown-missing bad fixture unexpectedly passed')
+  }
+
+  if (responseFeedbackMissingResult.ok) {
+    throw new Error('self-test responseFeedback missing-owner fixture unexpectedly passed')
   }
 
   console.log('PASS: self-test fixtures behaved as expected.')

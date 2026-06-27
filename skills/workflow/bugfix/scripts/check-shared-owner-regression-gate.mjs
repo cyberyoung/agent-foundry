@@ -19,7 +19,7 @@ skill-local check-decision-package.mjs with the detected changed files.
 `
 
 const SHARED_FILE_RE =
-  /^(package\.json$|[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$|src\/(App|main)\.tsx$|src\/api\/(request|index\.tsx$)|api\/request|src\/(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|scripts?\/|\.github\/workflows?\/|workflows?\/|templates?\/|generator(\/|$))/i
+  /^(package\.json$|[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$|src\/(App|main)\.tsx$|src\/api\/(request|responseFeedback|index\.tsx$)|api\/request|src\/(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|scripts?\/|\.github\/workflows?\/|workflows?\/|templates?\/|generator(\/|$))/i
 
 const args = process.argv.slice(2)
 
@@ -292,6 +292,9 @@ function fail(message) {
 function runSelfTest() {
   if (!isSharedOwnerPath('src/api/request.tsx')) {
     throw new Error('self-test expected src/api/request.tsx to be shared')
+  }
+  if (!isSharedOwnerPath('src/api/responseFeedback.ts')) {
+    throw new Error('self-test expected src/api/responseFeedback.ts to be shared')
   }
   if (!isSharedOwnerPath('src/auth.tsx')) {
     throw new Error('self-test expected src/auth.tsx to be shared')
