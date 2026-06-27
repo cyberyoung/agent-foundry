@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+/* v8 ignore start -- CLI behavior is covered by spawned decision-package gate tests. */
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -15,7 +15,6 @@ Checks a markdown decision package for:
   - Decision Table
   - Problem / Root Cause / Timeline or Inventory Summary
   - Evidence & Ownership
-  - Shared-Level Classification for shared/lower-level owner packages
   - Owner/RP Coverage Matrix
   - shared owners named in Fix Strategy also appearing in the matrix
   - no Coverage Status=missing rows
@@ -596,6 +595,12 @@ function parseMatrixRows(rows) {
 }
 
 function rowMentionsOwner(row, owner) {
+  const ownerPathTokens = extractOwnerPathTokens(owner)
+  if (ownerPathTokens.length > 0) {
+    const rowPathTokens = extractPathTokens(row).map(normalizePathToken)
+    return ownerPathTokens.every((token) => rowPathTokens.includes(token))
+  }
+
   const normalizedRow = row.toLowerCase()
   const tokens = owner
     .replace(/`/g, '')
@@ -611,6 +616,18 @@ function rowMentionsOwner(row, owner) {
       normalizedRow,
     ),
   )
+}
+
+function extractOwnerPathTokens(owner) {
+  return extractPathTokens(owner)
+    .map(normalizePathToken)
+    .filter((token) =>
+      /^(src|scripts|docs|\.github)\//.test(token) && token.includes('.'),
+    )
+}
+
+function normalizePathToken(token) {
+  return token.replace(/^.*?((?:src|scripts|docs|\.github)\/)/, '$1')
 }
 
 function extractRegressionActionRows(text) {
@@ -911,6 +928,7 @@ function isLikelySharedOwner(owner) {
   const normalized = owner.toLowerCase()
   if (isCallerOwner(owner)) return false
   if (isLocalPagePath(normalized)) return false
+  if (normalized === 'package.json') return true
   return (
     SHARED_OWNER_RE.test(owner) ||
     /\b(get|post|put|del|request|auth|config|wrapper|hook|shared component|helper|generator|template|script|workflow)\b/.test(normalized)
@@ -920,7 +938,7 @@ function isLikelySharedOwner(owner) {
 function isSharedOwnerPath(file) {
   if (isDocumentPath(file)) return false
   if (isTestFilePath(file)) return false
-  return /^(?:[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$)|(^|\/)(src\/(App|main)\.tsx|api\/request|src\/api\/request|hooks?|components?|utils?|helpers?|scripts?|workflow|templates?|generator|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b/i.test(file)
+  return /^(package\.json$|[^/]+\.config\.(?:js|cjs|mjs|ts|mts|cts)$|tsconfig[^/]*\.json$|src\/(App|main)\.tsx$|src\/api\/request|api\/request|src\/(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|(hooks?|components?|utils?|helpers?|config|auth|queryClient|routes?|atoms?|types?|permissions?|router|store)\b|scripts?\/|\.github\/workflows?\/|workflows?\/|templates?\/|generator(\/|$))/i.test(file)
 }
 
 function isDocumentPath(file) {
@@ -937,8 +955,16 @@ function isLocalPagePath(value) {
 
 function rowMentionsChangedPath(row, file) {
   const normalizedFile = file.replace(/^.*?src\//, 'src/').toLowerCase()
-  const basename = normalizedFile.split('/').pop()?.replace(/\.[^.]+$/, '') || normalizedFile
-  return rowMentionsOwner(row, normalizedFile) || rowMentionsOwner(row, basename)
+  return extractPathTokens(row).includes(normalizedFile)
+}
+
+function extractPathTokens(text) {
+  return text
+    .replace(/`/g, '')
+    .replace(/\\/g, '/')
+    .toLowerCase()
+    .split(/[^a-z0-9_./-]+/)
+    .filter(Boolean)
 }
 
 function cellHasConcretePlan(cell) {
