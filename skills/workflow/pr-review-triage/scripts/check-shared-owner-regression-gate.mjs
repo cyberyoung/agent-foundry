@@ -41,7 +41,7 @@ if (args.includes('--self-test')) {
 const mode = getOption('--mode') || 'generic'
 const changedFiles = getChangedFiles()
 const sharedFiles = changedFiles.filter(isSharedOwnerPath)
-const packageFiles = getPackageFiles()
+const packageCandidates = getPackageCandidates()
 
 if (changedFiles.length === 0) {
   fail('changed-file input is required; pass --changed-files, set DECISION_PACKAGE_CHANGED_FILES, or run inside a git worktree.')
@@ -51,7 +51,7 @@ if (sharedFiles.length === 0) {
   pass('no shared/lower-level owner files changed.')
 }
 
-if (packageFiles.length === 0) {
+if (packageCandidates.length === 0) {
   fail(`shared/lower-level owner files changed but no decision package was provided: ${sharedFiles.join(', ')}`)
 }
 
@@ -59,7 +59,7 @@ const checkerPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const missingPackageResults = []
 const invalidClaimResults = []
 
-for (const packageFile of packageFiles) {
+for (const { packageFile } of packageCandidates) {
   if (!fs.existsSync(packageFile)) {
     missingPackageResults.push({
       packageFile,
@@ -70,9 +70,10 @@ for (const packageFile of packageFiles) {
 
 const coveredPackageFiles = new Set()
 const uncoveredSharedFiles = sharedFiles.filter((sharedFile) =>
-  !packageFiles.some((packageFile) => {
+  !packageCandidates.some((candidate) => {
+    const { packageFile, packageMode } = candidate
     if (!fs.existsSync(packageFile)) return false
-    const result = runChecker(checkerPath, packageFile, [sharedFile])
+    const result = runChecker(checkerPath, packageFile, [sharedFile], packageMode)
     if (result.ok) {
       coveredPackageFiles.add(packageFile)
       return true
@@ -116,14 +117,14 @@ for (const result of missingPackageResults) {
 
 fail(`shared/lower-level owner files changed but no decision package covered every owner: ${uncoveredSharedFiles.join(', ')}`)
 
-function runChecker(checkerPath, packageFile, changedFiles) {
+function runChecker(checkerPath, packageFile, changedFiles, packageMode) {
   try {
     const output = execFileSync(
       process.execPath,
       [
         checkerPath,
         '--mode',
-        mode,
+        packageMode,
         '--changed-files',
         changedFiles.join(','),
         packageFile,
@@ -179,10 +180,13 @@ function extractPathTokens(text) {
     .filter(Boolean)
 }
 
-function getPackageFiles() {
+function getPackageCandidates() {
   const directPackages = getOptions('--package')
     .flatMap((value) => splitCsv(value))
-    .map((value) => path.resolve(value))
+    .map((value) => ({
+      packageFile: path.resolve(value),
+      packageMode: mode,
+    }))
 
   const packageDirs = getOptions('--packages-dir')
     .flatMap((value) => splitCsv(value))
@@ -192,14 +196,47 @@ function getPackageFiles() {
     if (!fs.existsSync(directory)) return []
     return fs.readdirSync(directory)
       .filter((name) => /\.md$/i.test(name))
-      .map((name) => path.join(directory, name))
+      .map((name) => {
+        const packageFile = path.join(directory, name)
+        return {
+          packageFile,
+          packageMode: inferPackageMode(packageFile),
+        }
+      })
   })
 
   const changedPackages = changedFiles
     .filter((file) => /^docs\/plans\/.*\.md$/i.test(file))
-    .map((file) => path.resolve(file))
+    .map((file) => {
+      const packageFile = path.resolve(file)
+      return {
+        packageFile,
+        packageMode: inferPackageMode(packageFile),
+      }
+    })
 
-  return unique([...directPackages, ...discoveredPackages, ...changedPackages])
+  return uniquePackageCandidates([...directPackages, ...discoveredPackages, ...changedPackages])
+}
+
+function inferPackageMode(packageFile) {
+  if (!fs.existsSync(packageFile)) return mode
+  const markdown = fs.readFileSync(packageFile, 'utf8')
+  const hasPrInventory = /^##\s+Inventory Summary\s*$/im.test(markdown)
+  const hasBugfixContext = /^##\s+Problem \/ Root Cause \/ Timeline\s*$/im.test(markdown)
+  if (hasPrInventory && !hasBugfixContext) return 'pr-review'
+  if (hasBugfixContext && !hasPrInventory) return 'bugfix'
+  return mode
+}
+
+function uniquePackageCandidates(candidates) {
+  const seen = new Set()
+  const result = []
+  for (const candidate of candidates) {
+    if (seen.has(candidate.packageFile)) continue
+    seen.add(candidate.packageFile)
+    result.push(candidate)
+  }
+  return result
 }
 
 function getChangedFiles() {
