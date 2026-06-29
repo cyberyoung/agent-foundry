@@ -31,7 +31,7 @@ the touched code is shared.
 
 1. If the comment touches a reusable component, hook, modal, tab container, or
    state holder, run `rg` for all call sites before changing behavior.
-2. Record the affected entry points in the decision table, including the
+2. Record the affected entry points in the Evidence & Ownership table, including the
    originally reported path and at least one existing user path if present.
 3. For state-like props (`defaultXxx`, `activeXxx`, `value`, `onXxxChange`,
    `onChange`), identify the contract explicitly:
@@ -50,8 +50,8 @@ the touched code is shared.
    nearby docs before editing.
 2. Determine whether the change is shared behavior or repo-specific config.
 3. For shared behavior, sync the consumer repo/file in the same task when it is
-   available; otherwise record the explicit non-sync reason in the decision
-   table and TODO.
+   available; otherwise record the explicit non-sync reason in the Evidence &
+   Ownership table and TODO.
 4. Verify both the source repo and the synced consumer repo, or report which
    side could not be verified and why.
 
@@ -86,8 +86,30 @@ Required checks:
 5. Put regression tests at the same abstraction layer as the fix. Shared
    behavior needs shared-component/helper/script tests; page tests should only
    cover page-specific contracts or representative integration paths.
+6. Cross-check `Fix Strategy` against the Regression Plan. Every shared owner,
+   lower-level helper, public wrapper, script, generated template, or API
+   surface named in `Fix Strategy` must have its own `RP-*` coverage group. If
+   the plan says "change request wrapper", "change shared hook", "change
+   generator", or similar, a caller-only regression plan is incomplete.
+7. Build an Owner/RP Coverage Matrix by mechanically extracting every noun phrase
+   in `Fix Strategy` that refers to a changed module, helper, wrapper, public
+   API, generated template, or caller. Mark each one `covered` or `missing`.
+   Any `missing` row is a stop sign before approval.
+8. For public helper/API surface changes, the `RP-*` group must cover:
+   - existing default behavior and positional-argument compatibility;
+   - new behavior introduced by the fix;
+   - side effects on shared/global state;
+   - all sibling wrappers touched by the abstraction, or explicit `N/A` rows
+     explaining why they are not touched;
+   - at least one representative caller for each adapted call path.
+9. If any public helper has broad call volume or ambiguous overloads, inspect
+   call sites before approval and record the compatibility risk in
+   Evidence & Ownership. Do not rely only on the reviewed call site.
+10. If the fix changes a shared/lower-level owner, plan three independent fresh
+   reviews of the Owner/RP Coverage Matrix and Regression Plan before approval.
+   Do not proceed until all three report zero missing owner regression coverage.
 
-The decision table notes for every code-change item must include:
+The Evidence & Ownership table for every code-change item must include:
 
 - `Abstraction owner`: chosen layer and why lower layers were not used
 - `Repeated patch check`: whether the proposed change would otherwise be
@@ -188,23 +210,32 @@ Required checks:
 6. If the existing coverage is below the target, add regression tests or a
    coverage-only proof step before changing production code. If the target is
    impractical or not measurable with local tooling, record the reason and the
-   substitute evidence in the decision-table notes; do not silently skip it.
+   substitute evidence in the Regression Plan table; do not silently skip it.
 7. When adjacent behavior is user-visible, regression coverage must include
-   browser/page verification unless the decision table records why component or
-   unit coverage is sufficient.
+   browser/page verification unless the Regression Plan table records why
+   component or unit coverage is sufficient.
 8. If no additional regression test is needed, record the reason in the
-   decision-table notes, for example: "Regression tests: N/A, single pure helper
-   with exhaustive RED assertion."
+   Regression Plan table, for example: `Regression Action=N/A`, reason
+   `single pure helper with exhaustive RED assertion`.
 
-The decision table's `Test plan` must name both:
+The decision package must name the TDD work in the dedicated Regression Plan
+and TDD / Commit / Reply Plan tables:
 
 - `RED`: the failing test that reproduces the review finding.
-- `Regression`: the additional passing tests or browser checks that prove
-  adjacent behavior was not broken.
+- `Existing GREEN`: already-covered behavior plus baseline command/result.
+- `Add old-GREEN`: currently correct but uncovered/weak behavior that must be
+  proven before the review-finding RED or production code edit.
+- `Post-fix GREEN`: behavior only provable after the implementation change.
 - `Coverage target`: existing coverage signal, planned target (95%+, or 100%
   for critical paths), and the exact test/coverage command that will prove it.
 - `Browser Regression`: the route/user path and Browser GREEN evidence when
   needed, or `N/A` with a reason when browser coverage is not needed.
+
+Keep the Decision Table narrow; it should reference `RP-*`, `EO-*`, and `TDD-*`
+rows rather than embedding thread/source ids, long paths, baselines, or review
+comment translations. Put path, source id, evidence, owner, blast radius,
+baseline quality, closeout level, and original/translated review text in the
+Evidence & Ownership table.
 
 ### 3b.5.2 Form field path vs payload path
 
@@ -249,7 +280,7 @@ Required checks:
      settles
 4. If the static fact is suspicious but the user-action boundary is unproved,
    classify the item as **Needs proof / coverage-first verification** in the
-   decision table. Only after the proof test fails may production code be
+   decision package. Only after the proof test fails may production code be
    changed.
 
 ### 3b.7 Browser verification for UI findings
@@ -267,10 +298,10 @@ browser/page verification unless the item is classified as Needs proof and no
 verdict is being made yet. Execute the verification using
 `wf-ui-browser-verification`, then record the PR-triage evidence below.
 Do not replace this with source inspection or unit tests alone unless the
-decision table explicitly proves that the reviewed behavior is not visible at a
+decision package explicitly proves that the reviewed behavior is not visible at a
 user-action boundary.
 
-Record in the decision-table notes:
+Record in the Evidence & Ownership or Regression Plan table:
 
 - `Browser path`: route and user steps
 - `Browser control`: in-app browser, user-profile browser, or scripted /
@@ -284,7 +315,8 @@ Record in the decision-table notes:
 
 When a review comment proposes a concrete alternative implementation (e.g., "use `Get-NetTCPConnection` instead of `findstr`"), and you decide on a different fix, you MUST:
 
-1. List both approaches in the decision table with pros/cons
+1. List both approaches in the Decision Table `Fix Strategy` cell when short,
+   or in the Evidence & Ownership table when pros/cons need more room
 2. Justify why your approach is better with concrete evidence — **OR** adopt the reviewer's approach
 3. Never silently dismiss the reviewer's suggestion in favor of your own
 
@@ -337,4 +369,4 @@ refs:
 {简要描述问题、为何暂缓、建议方案}
 ```
 
-文件命名：`{简短-slug}.md`。创建后在 reply 和 decision table 中用相对路径引用（如 `docs/todo/audit-component-directory.md`）。
+文件命名：`{简短-slug}.md`。创建后在 reply 和 decision package 中用相对路径引用（如 `docs/todo/audit-component-directory.md`）。

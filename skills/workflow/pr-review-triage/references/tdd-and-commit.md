@@ -23,6 +23,18 @@ Required evidence per review item:
   - `Unavailable`: stop, explain the blocker, or use a clean temporary
     worktree if the current worktree is already contaminated.
 
+Execution order is part of the gate:
+
+1. Baseline GREEN and quality-sufficient -> write the review-finding RED.
+2. Baseline GREEN but quality-insufficient -> write old-GREEN
+   characterization/regression coverage first, run it to GREEN, then write the
+   review-finding RED.
+3. Baseline unavailable or failing -> stop until the baseline is recovered or
+   explicitly re-scoped.
+
+Do not combine step 2 into the RED test. If the first new test fails, it is not
+old-GREEN characterization coverage.
+
 Hard rule: a new RED test does not replace existing regression baseline proof.
 Do not edit production code until the original regression baseline is GREEN and
 quality-sufficient, or the missing old-GREEN regression coverage has been added
@@ -30,17 +42,17 @@ and proven GREEN first.
 
 ## Phase 3.5: Confirmation Gate (MANDATORY)
 
-**After verification, do NOT execute any fixes or resolves on your own.** You must first output a decision table and wait for user approval.
+**After verification, do NOT execute any fixes or resolves on your own.** You must first output a decision package and wait for user approval.
 
 This gate applies even when:
 
 - The user asks about one specific review finding.
 - The finding looks obviously correct.
 - You already fixed another finding in the same PR.
-- A previous decision table existed before a new push, bot rerun, or missed
+- A previous decision package existed before a new push, bot rerun, or missed
   review item was discovered.
 
-If the inventory changed, the old approval is stale. Present the updated table
+If the inventory changed, the old approval is stale. Present the updated package
 and wait for fresh approval before editing, committing, pushing, replying, or
 resolving.
 
@@ -48,10 +60,10 @@ resolving.
 
 If the user explicitly authorizes autonomous/self-directed handling for the
 current PR triage loop, treat that as approval to proceed through Phase 4-5.5
-without pausing at each new decision table. This is not permission to skip the
-decision table. Instead:
+without pausing at each new decision package. This is not permission to skip the
+decision package. Instead:
 
-1. Build the inventory and decision table internally before editing.
+1. Build the inventory and decision package internally before editing.
 2. Keep each review item in its own TDD/proof cycle and commit unless the user
    explicitly approved another grouping.
 3. Reply/resolve only after current-head PR checks are green.
@@ -70,41 +82,210 @@ intended. Do not infer it from a casual "continue".
 
 Output format:
 
-Keep the table compact. Do not put long evidence, code snippets, proposed
-reply text, or multi-sentence explanations inside table cells; they wrap badly
-in chat UIs. Put long details under the table in per-item notes.
-Reviewer comments often contain nuance that is easy to miss in English-only
-tables. For every decision-table item, include the review comment's original
-text and a concise Chinese translation in the per-item notes below the table.
-Do not add these as wide table columns.
+Produce a **decision package**, not one overloaded table. The package has five
+blocks in this order. The decision table is only an index; detailed evidence,
+regression planning, and execution steps live in their own tables so the fix
+strategy remains visible.
+
+### 1. Inventory Summary
+
+Keep this short and factual. Include fetched counts, actionable counts, latest
+head/time, and whether pagination completed.
 
 ```
-| # | File | Level | Verdict | Closeout | Impact Scope | Existing Regression Baseline | Regression Plan | Action | Thread(s) |
-|---|------|-------|---------|----------|--------------|------------------------------|-----------------|--------|-----------|
-| 1 | service/foo.go:42 | P2 | Real bug | L1/local | request payload owner; no generated code | GREEN 42/42; owner path sufficient | RED plus 100% branch regression | TDD fix + checks | PRRT_xxx |
-| 2 | handler/bar.go:95 | P2 | False positive | L0/no code | handler only | GREEN 18/18; contract already covered | No new code; cite existing proof | Reply + resolve | PRRT_yyy |
-| 3 | scripts/x.sh:12 | P2 | Deferred | L4/governance | shared CI helper | N/A no executable change | TODO, no code change | TODO + resolve | review body |
-| 4 | service/baz.go:88 | P2 | Needs proof | L2/shared | shared hook + consumers | Missing/weak; add old-GREEN characterization first | Coverage-first test required | Coverage-first test | PRRT_zzz |
+| Source | Fetched | Actionable | Notes |
+|---|---:|---:|---|
+| Inline threads | 14/14 | 1 | hasNextPage=false |
+| Review bodies | 22 | 0 | newest 2026-... |
+| PR comments | 0 | 0 | - |
 ```
 
-Then add short notes outside the table:
+### 2. Decision Table
+
+The decision table must answer "what will change and where do I inspect the
+details?" Do not put long evidence, long regression lists, proposed replies,
+or multi-sentence explanations in these cells.
+
+`Fix Strategy` is mandatory for any real bug/style/code change. It must state
+the owner-layer implementation approach, not the tests. If the table does not
+make the proposed fix understandable without reading the regression plan, the
+table is incomplete.
+
+Every row must include `Baseline Verdict` and `First Code Action`. The first
+code action is mechanically derived from the baseline verdict:
+`Sufficient -> RED`, `Insufficient -> Add old-GREEN`, and
+`Unavailable -> STOP`. If these disagree, the decision package is invalid.
 
 ```
-1. Summary: GORM skips zero values.
-   Review comment (original): "..."
-   Review comment (中文): "..."
-   Evidence: `Updates(struct)` skips zero values; API allows clearing this field.
-   Abstraction owner: service payload builder, because all callers share the same update contract.
-   Repeated patch check: no duplicate call-site guards needed after the shared fix.
-   Generator/template impact: N/A, not generated code.
-   Impact scope: local service helper; downstream API handler covered.
-   Closeout level: L1 in chogori model; current repo has equivalent focused test only.
-   Test level: service helper RED plus API handler regression.
-   Existing regression baseline: command `pnpm test ./service`; result GREEN 42/42; quality sufficient because owner helper path, API handler path, and non-zero update regression are covered before any new RED test.
-   Test plan: RED `testZeroValueSkip`; Regression `testNonZeroUpdateStillWorks`; Coverage target 100% branch coverage for zero/non-zero payload selection via `pnpm vitest run ... --coverage`; Browser Regression N/A: API-only payload formatting; GREEN after map/select update.
-   Full gate policy: no local full gate; wait for pre-push/provider CI after batch push. Exception: run repo-required full gate for L3/L4, governance, security, permission, audit, data-scope, or user-requested checks.
-   Compatibility exception: N/A, repo has focused tests and PR checks. If missing, name the missing standard, substitute evidence, and residual risk.
-   Planned reply: Fixed in `{hash}` after PR checks pass.
+| # | Review Item | Verdict | Fix Strategy | Regression Plan | Evidence/Owner | Baseline Verdict | First Code Action | Action |
+|---|-------------|---------|--------------|-----------------|----------------|------------------|-------------------|--------|
+| 1 | zero-value clear | P2 Real bug | build explicit update map in payload owner | RP-1 | EO-1 | Sufficient | RED | TDD-1 |
+| 2 | weak baseline | P2 Real bug | add modal lifecycle guard in page owner | RP-2 | EO-2 | Insufficient | Add old-GREEN | TDD-2 |
+| 3 | payload path | P2 False positive | no code; hook already maps field to payload | RP-3 | EO-3 | Unavailable | STOP | Reply only |
+```
+
+### 3. Evidence & Ownership Table
+
+Move detailed verdict notes here. Every decision row needs an
+Evidence/Owner reference. Include the review comment original text and concise
+Chinese translation outside the decision table, either in this table when short
+or immediately below the table under the same `EO-*` ref.
+
+```
+| Ref | Source | Path | Evidence | Owner Layer | Blast Radius | Generator/Template |
+|---|---|---|---|---|---|---|
+| EO-1 | PRRT_xxx | [service/foo.go](/absolute/repo/service/foo.go:42) | `Updates(struct)` skips zero values; API allows clearing | service payload builder | API handler and update callers | N/A |
+```
+
+Required Evidence/Ownership fields:
+
+- source thread/comment/review id and GitHub URL when available;
+- clickable absolute local path and line;
+- review comment original text and Chinese translation;
+- concrete evidence for the verdict;
+- abstraction owner and why lower-level call-site patches are not enough;
+- shared-level classification when the path or owner can be confused across
+  repo-wide, page/domain-local, and page-local boundaries;
+- repeated patch check / blast radius;
+- generator/template impact, or `N/A`;
+- closeout level / compatibility exception when relevant.
+
+When a review item involves shared-looking paths such as `components`, `hooks`,
+`helpers`, scripts, generators, or domain-scoped modules, add a
+`Shared-Level Classification` table under the matching `EO-*` reference:
+
+```
+| Path / Surface | Shared Level | Gate Classification | Regression Owner |
+|---|---|---|---|
+| src/components/* | repo-wide / lower-level shared | repo-wide shared-owner gate | repo-wide component contract + representative callers |
+| src/pages/*/components/* | page/domain-local shared | domain owner, not repo-wide gate | domain/component owner + affected page entry matrix |
+| leaf page component | page-local | no repo-wide gate | page entry + bug-target regression |
+```
+
+Do not equate "not repo-wide" with "not shared." Page/domain-local shared
+components still need owner-level regression for their domain. They only avoid
+the repo-wide shared-owner gate.
+
+### 4. Regression Plan Table
+
+Regression planning must not be a promise such as "preserve X". It must classify
+each behavior by current coverage and the exact action needed.
+
+Before listing behavior rows, emit an **Owner/RP Coverage Matrix** extracted
+from `Fix Strategy`. This is a hard completeness check:
+
+```
+| Decision | Owner / Surface Changed By Fix Strategy | RP Group | Coverage Status |
+|---|---|---|---|
+| #1 | request wrapper `get/post` public API | RP-1A | covered |
+| #1 | temporary auth helper | RP-1B | covered |
+| #1 | caller `getOmConfigWithToken` | RP-1C | covered |
+| #1 | caller `changePasswordWithToken` | RP-1C | covered |
+```
+
+If any owner/surface named in `Fix Strategy` has missing, blank, partial, or
+caller-only `Coverage Status`, stop and complete the Regression Plan before
+asking for approval. Do not bury this gap in prose.
+
+Every owner layer named in `Fix Strategy` must appear in this table. If the fix
+strategy changes a shared/lower-level API, create a separate `RP-*` group for
+that owner before caller-level regressions. A decision package that changes a
+request wrapper, shared hook, generator, script, or component contract but only
+lists caller-level tests is incomplete.
+
+Shared-level classification controls the regression owner:
+
+| Shared Level | Required Regression Plan | Repo-Wide Gate |
+|---|---|---|
+| repo-wide/lower-level shared | owner contract, representative callers, compatibility, generator/template impact when applicable | required |
+| page/domain-local shared | domain/component owner-level tests, affected entry matrix, browser proof when visible | not required unless the fix also changes repo-wide owner |
+| page-local | current page entry and bug target | not required |
+
+`N/A` may be used for the repo-wide gate only with a reason. It is invalid to
+mark page/domain-local shared code as `N/A` for regression; the domain/component
+owner plan must still be explicit.
+
+Allowed `Regression Action` values:
+
+- `Existing GREEN`: already covered; record the baseline command/result.
+- `Add old-GREEN`: currently correct but uncovered/weak; add and prove it
+  before the review-finding RED test or production code.
+- `RED`: the review bug target; write a failing test that proves the bug.
+- `Post-fix GREEN`: only provable after the implementation change.
+- `N/A`: not applicable, with a short reason.
+
+```
+| Ref | Owner / Surface | Regression Scope | Behavior / Contract | Current Coverage | Regression Action | Test / Proof |
+|---|---|---|---|---|---|---|
+| RP-1A | request wrapper `get/post` | owner-level | default request behavior | Existing test covers wrapper | Existing GREEN | `pnpm test ./service` 42/42 |
+| RP-1A | request wrapper `get/post` | owner-level | zero value clears field | Missing, bug target | RED | `testZeroValueClear` fails before fix |
+| RP-1C | generated caller | caller | generated caller uses same payload owner | Missing but current behavior is correct | Add old-GREEN | generator/helper regression before RED |
+```
+
+If any row is `Add old-GREEN`, the first approved code action for that item is
+that old-GREEN test. If any row is `Existing GREEN`, name the exact baseline
+command and result. If the affected behavior is visible UI, include Browser
+RED/GREEN here or explicitly mark Browser Regression `N/A` with a reason.
+
+Before asking for approval, shared/lower-level owner changes must save the
+decision package as a markdown artifact and run the lightweight checker:
+
+```bash
+node <skill-dir>/scripts/check-decision-package.mjs --mode pr-review --changed-files <comma-separated-changed-files> <decision-package.md>
+```
+
+For non-shared changes, run the checker whenever a decision-package artifact
+exists. If the checker is not available in the current repo/skill installation,
+say so and manually perform the same checks. The checker is a structural floor:
+it requires a Decision Table, Owner/RP Coverage Matrix, shared owners from
+`Fix Strategy` or `--changed-files` represented in the matrix, no invalid or
+missing `Coverage Status`, Decision Table rows with `Baseline Verdict` and
+`First Code Action` obeying `Sufficient -> RED`,
+`Insufficient -> Add old-GREEN`, `Unavailable -> STOP`, and Regression Plan
+rows with explicit `Existing GREEN`, `Add old-GREEN`, `RED`,
+`Post-fix GREEN`, or `N/A` actions rather than only `preserve`/`保留` wording.
+For repo-wide/lower-level shared owners, the
+Regression Plan action table must include an owner-level signal, such as
+`Regression Scope=owner-level` or an `Owner / Surface` cell that matches the
+matrix owner. The checker also requires three distinct real subagent/session
+review sources and a `Local/CI Gate Design` with command, detector/gate/hook,
+and failure rule. The `Evidence` cell must be a file path, relative to the
+decision package, containing the actual subagent completion notification for the
+matching `agent_path` with `no blockers`.
+
+If `Fix Strategy` changes a repo-wide/lower-level shared owner, run three independent
+fresh reviews of the Owner/RP Coverage Matrix and Regression Plan before asking
+for approval. Reviewers must check whether every shared owner named in
+`Fix Strategy` has owner-level regression coverage, whether caller-only tests
+are hiding a shared-owner gap, and whether missing old-GREEN coverage changes
+the first approved code action. Revise until all three report zero missing
+owner regression coverage. Record the result:
+
+```
+## 3-Reviewer Regression Plan Review
+| Reviewer | Source | Missing Owner Count | Evidence | Notes |
+|---|---|---:|---|---|
+| A | 01900000-0000-4000-8000-000000000001 | 0 | evidence/subagent-a.json | RP group owner coverage, caller-only masking, first action checked |
+| B | 01900000-0000-4000-8000-000000000002 | 0 | evidence/subagent-b.json | RP group owner coverage, caller-only masking, first action checked |
+| C | 01900000-0000-4000-8000-000000000003 | 0 | evidence/subagent-c.json | RP group owner coverage, caller-only masking, first action checked |
+
+## Local/CI Gate Design
+Contract version: `2026-06-shared-owner-rp-v1`
+Repo-local durable gate: `pnpm check:decision-package -- --mode pr-review --package docs/plans/example.md` (or `N/A: no repo-local gate found`)
+Repo integration: `check:task` / pre-push / CI workflow path that calls the repo-local gate, or `N/A` with residual risk.
+Skill-local fallback: `node <skill-dir>/scripts/check-shared-owner-regression-gate.mjs --mode pr-review --changed-files src/api/request.tsx --package docs/plans/example.md`
+Gate: fail when a shared owner path changed but no package exists, no package passes, or the package lacks owner-level matrix/regression coverage.
+Fallback warning: if repo-local durable gate is absent, state that CI will not enforce this rule yet.
+```
+
+### 5. TDD / Commit / Reply Plan
+
+This table is execution-only. It should not explain the whole bug again.
+
+```
+| Ref | Sequence | Commit Plan | Checks | Reply Target |
+|---|---|---|---|---|
+| TDD-1 | old-GREEN -> RED -> fix -> GREEN | `fix(api): clear zero values` | focused tests + check:task + PR checks | PRRT_xxx after current-head green |
 ```
 
 Then ask the user: **"Do you agree with this plan? Any changes needed?"**
@@ -122,7 +303,7 @@ Then ask the user: **"Do you agree with this plan? Any changes needed?"**
   the batch head is green. False-positive, already-fixed, and deferred/no-code
   findings still wait for the same final reply/resolve pass when there are code
   changes in the batch. New findings discovered after that pass require a fresh
-  inventory delta and decision table.
+  inventory delta and decision package.
 - Use a per-finding push/check loop only when the user explicitly asks for it,
   when the batch is too risky to review coherently, or when an urgent isolated
   hotfix must be landed before continuing.
@@ -149,10 +330,10 @@ Write a test that reproduces the exact bug identified in the review finding.
 - This RED test is not automatically sufficient regression coverage and does
   not replace Phase 3.4. Before writing this RED test, the existing regression
   baseline must already be GREEN and quality-sufficient, or missing old-GREEN
-  characterization coverage must have been added. Before editing production
-  code, also list the necessary regression tests from Phase 3b.5.1. Add them
-  before or immediately after the minimal fix, and run them in the GREEN
-  verification.
+  characterization coverage must have been added and proven GREEN. If the
+  approved `Regression Plan` names missing adjacent regression, coverage-only,
+  or behavior-preserving characterization tests, add and run those tests first.
+  Only then write the review-finding RED test and edit production code.
 - For user-visible fixes, include Browser Regression in the approved plan:
   Browser RED when proving the UI bug and Browser GREEN when proving adjacent
   visible behavior still works. If browser coverage is not needed, record the
@@ -165,14 +346,14 @@ Write a test that reproduces the exact bug identified in the review finding.
   `wf-ui-browser-verification` for Browser RED/GREEN evidence. Do not duplicate
   that skill's browser-evidence rules here.
 - Run the test — it MUST FAIL. If it passes, your test is wrong (it doesn't actually catch the bug).
-- Report the failure in the decision table reply.
+- Report the failure in the TDD / Commit / Reply Plan evidence.
 
 ```bash
 # Run the specific test file to confirm failure
 pnpm vitest run path/to/__tests__/file.test.tsx -t "test name"
 ```
 
-**Required output in decision table for each fix:**
+**Required output in the TDD / Commit / Reply Plan for each fix:**
 
 ```
 RED: test_name — FAILS as expected (reproduces the bug)
@@ -230,6 +411,7 @@ pnpm vitest run path/to/__tests__/
 | If | Then |
 |----|------|
 | Existing regression baseline missing before RED/fix | STOP. Run owner regressions, record GREEN count and quality, or add old-GREEN characterization first. |
+| Existing regression baseline is GREEN but quality-insufficient | STOP before RED. Add old-GREEN characterization/regression coverage first and prove it passes on current code. |
 | Fix code written before test | STOP. Delete fix code. Write test first. |
 | Test passes on first run (before fix) | Test is wrong — it didn't catch the bug. Rewrite it. |
 | Multiple bugs fixed in one cycle | STOP. One test per bug. Separate cycles. |
